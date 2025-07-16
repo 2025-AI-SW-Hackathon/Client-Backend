@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
+@CrossOrigin(origins = "http://34.64.112.111:3000")  // 임시 적용
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/pdf")
