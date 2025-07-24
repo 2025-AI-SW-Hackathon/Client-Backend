@@ -96,6 +96,7 @@ public class GoogleSpeechService {
                         payload.put("refinedText", result.get("refinedText"));
                         payload.put("voice",result.get("voice"));
                         payload.put("answerState", result.get("answerState")); // 반드시 포함!
+                        payload.put("pageNumber", result.get("pageNumber"));
 //                        payload.put("refinedMarkdown", result.get("refinedMarkdown"));
                         String refinedText = String.valueOf(result.get("refinedText")).trim();
 
