@@ -54,3 +54,5 @@ uploads
 # build artifacts
 *.jar
 *.zip
+
+.env
