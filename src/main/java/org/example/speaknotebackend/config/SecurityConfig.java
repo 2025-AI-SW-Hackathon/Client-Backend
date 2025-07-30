@@ -8,6 +8,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 
@@ -22,7 +23,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(withDefaults())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -33,11 +34,14 @@ public class SecurityConfig {
                                 "/swagger-resources/**",     // (일부 swagger-ui 라이브러리)
                                 "/webjars/**",               // swagger-ui에 필요한 js 라이브러리
                                 "/ws/audio",
-                                "/ws/annotation"
-                        ).permitAll()                          // PDF 다운로드는 로그인 없이 허용
+                                "/ws/annotation",
+                                "/app/users/auth/**"         // OAuth 로그인 엔드포인트 허용
+                        ).permitAll()                          // 인증 없이 접근 허용
+                        .requestMatchers("OPTIONS", "/**").permitAll() // OPTIONS 요청 허용
                         .anyRequest().authenticated()          // 나머지는 로그인 필요
                 )
-                .formLogin(withDefaults()); // 기본 로그인 폼 제공
+                .formLogin(form -> form.disable()) // 기본 로그인 폼 비활성화
+                .httpBasic(basic -> basic.disable()); // HTTP Basic 인증 비활성화
 
         return http.build();
     }
@@ -47,12 +51,20 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(allowedOrigin)); // 환경변수에서 불러온 값 사용
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
+        config.setExposedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true); // 쿠키 포함 시 true
+        config.setMaxAge(3600L); // preflight 요청 캐시 시간 (1시간)
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config); // 모든 경로에 적용
         return source;
+    }
+
+    // RestTemplate 빈 생성
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
 }

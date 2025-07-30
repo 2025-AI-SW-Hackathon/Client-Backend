@@ -61,6 +61,14 @@ dependencies {
 
     // MySQL 드라이버
     runtimeOnly('com.mysql:mysql-connector-j')
+
+    // JWT 생성·파싱용 JJWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly    'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly    'io.jsonwebtoken:jjwt-jackson:0.11.5' // JSON 바인딩
+
+    // 스프링 시큐리티 OAuth2 JWT support
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
 }
 
 dependencyManagement {
