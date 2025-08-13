@@ -17,7 +17,7 @@ public class FileAnnotationDoc {
     private ObjectId id;
 
     private Long fileId;      // RDB 파일 PK
-    private Long userId;      // 저장 수행자
+    private Long userId;      // lecture Id ..?였나 fileId 였나 기억이 안남..
     private Integer version;  // 1부터 증가(스냅샷 버전)
 
     private List<Slide> slides;
