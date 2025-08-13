@@ -2,8 +2,16 @@ package org.example.speaknotebackend.service;
 
 import lombok.RequiredArgsConstructor;
 
+import org.example.speaknotebackend.common.exceptions.BaseException;
+import org.example.speaknotebackend.common.response.BaseResponseStatus;
+import org.example.speaknotebackend.domain.repository.LectureFileRepository;
+import org.example.speaknotebackend.domain.repository.UserRepository;
+import org.example.speaknotebackend.domain.user.UserService;
+import org.example.speaknotebackend.entity.LectureFile;
+import org.example.speaknotebackend.entity.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
@@ -22,32 +30,47 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PdfService {
 
+
+    @Value("${custom.pdf.storage-dir}")
+    private String storageDir; // 환경별로 경로 다르게 설정 가능
+
     @Value("${custom.pdf.allowed-origin}")
     private String fastapiBaseUrl;
 
-    public String saveTempPDF(MultipartFile file) {
+    @Transactional
+    public String saveTempPDF(MultipartFile file,Long userId) {
         try {
             // 저장할 임시 폴더 경로
-            Path uploadDir = Paths.get("uploads/temp");
+            Path uploadDir = Paths.get(storageDir);
 
             // 폴더가 없다면 생성
             if (!Files.exists(uploadDir)) {
                 Files.createDirectories(uploadDir);
             }
 
-            // UUID 기반 파일명 생성
-            String fileId = UUID.randomUUID().toString();
-            String fileName = fileId + ".pdf";
-            Path filePath = uploadDir.resolve(fileName);
+            // UUID + 원래 파일명
+            String originalName = file.getOriginalFilename();
+            String uuid = UUID.randomUUID().toString();
+            String storedFileName = uuid + "_" + originalName;
+            Path filePath = uploadDir.resolve(storedFileName);
 
             // 파일 저장
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
+            User user=userRepository.findById(userId).orElseThrow(()-> new BaseException(BaseResponseStatus.USER_NOT_FOUND));
 
+            // LectureFile 엔티티 생성
+            LectureFile lectureFile = LectureFile.builder()
+                    .user(user)
+                    .fileName(storedFileName)
+                    .fileUrl(filePath.toString()) // 또는 배포 시 URL
+                    .build();
+
+//            LectureFile lectureFile1 = lectureFileRepository.save(lectureFile);
             // 저장한 파일 ID 반환
-            return fileId;
+            return storedFileName;
         } catch (IOException e) {
-            throw new RuntimeException("PDF 임시 저장 실패", e);
+            throw new BaseException(BaseResponseStatus.FILE_FAIL_UPLOAD);
         }
     }
 
@@ -96,4 +119,7 @@ public class PdfService {
     }
 
 
+    private final UserService userService;
+    private final UserRepository userRepository;
+    private final LectureFileRepository lectureFileRepository;
 }
