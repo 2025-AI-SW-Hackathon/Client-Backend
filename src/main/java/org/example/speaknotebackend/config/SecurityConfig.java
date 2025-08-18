@@ -4,15 +4,20 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.context.NullSecurityContextRepository;
+import org.example.speaknotebackend.global.JwtService;
+import org.example.speaknotebackend.domain.user.UserService;
 
 import java.util.List;
 
-import static org.springframework.security.config.Customizer.withDefaults;
+// removed unused import
 
 @Configuration
 public class SecurityConfig {
@@ -21,10 +26,12 @@ public class SecurityConfig {
     private String allowedOrigin;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .securityContext(ctx -> ctx.securityContextRepository(new NullSecurityContextRepository()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/",                         // 루트
@@ -42,6 +49,9 @@ public class SecurityConfig {
                 )
                 .formLogin(form -> form.disable()) // 기본 로그인 폼 비활성화
                 .httpBasic(basic -> basic.disable()); // HTTP Basic 인증 비활성화
+
+        // JWT 인증 필터 추가
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -66,5 +76,10 @@ public class SecurityConfig {
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
+    }
+
+    @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter(JwtService jwtService, UserService userService) {
+        return new JwtAuthenticationFilter(jwtService, userService);
     }
 }

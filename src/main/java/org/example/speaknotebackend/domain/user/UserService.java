@@ -25,6 +25,12 @@ public class UserService {
                 .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
     }
 
+    public User findActiveById(Long userId) {
+        return userRepository
+                .findByIdAndStatus(userId, BaseEntity.Status.ACTIVE)
+                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+    }
+
     @Transactional
     public User createUser(String email, String name, String socialId, SocialType socialType) {
         User user = User.builder()

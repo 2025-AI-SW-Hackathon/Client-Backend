@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 
-import static org.example.speaknotebackend.common.response.BaseResponseStatus.USER_NOT_FOUND;
+ 
 
 @Slf4j
 @Service
@@ -24,7 +24,7 @@ public class OAuthService {
 
     @Transactional
     public GetSocialOAuthRes oAuthLogin(
-            SocialLoginType socialLoginType, String code, String accessToken, String ip)
+            SocialLoginType socialLoginType, String code, String accessToken)
             throws IOException {
 
         SocialOauth socialOauth = socialLoginType.getSocialOauth();
