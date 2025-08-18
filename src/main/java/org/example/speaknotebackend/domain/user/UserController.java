@@ -38,6 +38,7 @@ public class UserController {
             throws Exception {
 
         SocialLoginType loginType = SocialLoginType.fromString(socialLoginType);
+      
         GetSocialOAuthRes getSocialOAuthRes =
                 oAuthService.oAuthLogin(loginType, code, accessToken);
 

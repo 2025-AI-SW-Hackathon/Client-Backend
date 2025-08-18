@@ -15,6 +15,7 @@ import org.springframework.security.web.context.NullSecurityContextRepository;
 import org.example.speaknotebackend.global.JwtService;
 import org.example.speaknotebackend.domain.user.UserService;
 
+
 import java.util.List;
 
 // removed unused import
