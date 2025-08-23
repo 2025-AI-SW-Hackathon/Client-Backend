@@ -69,6 +69,11 @@ dependencies {
 
     // 스프링 시큐리티 OAuth2 JWT support
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+
+    //몽고 디비
+    implementation "org.springframework.boot:spring-boot-starter-data-mongodb"
+    implementation "org.springframework.boot:spring-boot-starter-validation"
+    implementation "com.fasterxml.jackson.core:jackson-databind"
 }
 
 dependencyManagement {
