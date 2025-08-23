@@ -11,6 +11,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.example.speaknotebackend.config.UserDetailsImpl;
 
 import java.util.Map;
 
@@ -31,6 +33,7 @@ public class PdfController {
        //TODO: 하드 코딩
         Long userId = 3L;
         String fileId = pdfService.saveTempPDF(file,userId);
+
         String fastApiResponse = pdfService.sendPdfFileToFastAPI(file);  //응답 받아오기
         System.out.println("FastAPI 응답: " + fastApiResponse);  //로그 출력
 
