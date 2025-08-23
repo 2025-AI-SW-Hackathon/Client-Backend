@@ -57,18 +57,6 @@ public class JwtService {
                 .compact();
     }
 
-    public String createAdminJwt(Long adminId) {
-        Date now = new Date();
-        return Jwts.builder()
-                .setHeaderParam("type", "jwt")
-                .claim("adminId", adminId)
-                .setIssuedAt(now)
-                .setExpiration(
-                        new Date(System.currentTimeMillis() + 1 * (1000 * 60 * 60 * 24 * 365)))
-                .signWith(SignatureAlgorithm.HS256, JWT_SECRET_KEY)
-                .compact();
-    }
-
     /*
      * Header에서 AUTHORIZATION 으로 JWT 추출
      *
@@ -110,33 +98,15 @@ public class JwtService {
      * @throws BaseException
      */
     public Long getUserId() {
-        // 1. JWT 추출
         String accessToken = getJwt();
-
         return getUserIdByToken(accessToken);
-    }
-
-    public Long getUserIdOrElse() {
-        String accessToken = getJwtOrElse();
-
-        return accessToken == null ? null : getUserIdByToken(accessToken);
     }
 
     public Long getUserIdByToken(String token) {
         // JWT parsing
-        Jws<Claims> claims;
-
-        try {
-            claims = Jwts.parser().setSigningKey(JWT_SECRET_KEY).parseClaimsJws(token);
-
-        } catch (ExpiredJwtException expired) {
-            throw new BaseException(EXPIRED_JWT);
-        } catch (Exception ignored) {
-            throw new BaseException(INVALID_JWT);
-        }
-
+        Claims claims = parseClaims(token);
         // userIdx 추출
-        return claims.getBody().get("userId", Long.class);
+        return claims.get("userId", Long.class);
     }
 
     public String refreshJwt(String refreshToken, User user) {
@@ -148,49 +118,13 @@ public class JwtService {
         }
     }
 
-    public Long getUserIdOrNull() {
-        HttpServletRequest request =
-                ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes())
-                        .getRequest();
-
-        String accessToken = request.getHeader(HttpHeaders.AUTHORIZATION);
-
-        if (accessToken != null) {
-            return getUserId();
-        } else {
-            return null;
-        }
-    }
-
-    /*
-     * JWT에서 adminId 추출
-     *
-     * @return Long
-     *
-     * @throws BaseException
-     */
-    public Long getAdminId() {
-        // 1. JWT 추출
-        String accessToken = getJwt();
-
-        // 2. JWT parsing
-        return getAdminIdByToken(accessToken);
-    }
-
-    public Long getAdminIdByToken(String token) {
-        // JWT parsing
-        Jws<Claims> claims;
-
+    public Claims parseClaims(String token) {
         try {
-            claims = Jwts.parser().setSigningKey(JWT_SECRET_KEY).parseClaimsJws(token);
-
+            return Jwts.parser().setSigningKey(JWT_SECRET_KEY).parseClaimsJws(token).getBody();
         } catch (ExpiredJwtException expired) {
             throw new BaseException(EXPIRED_JWT);
         } catch (Exception ignored) {
             throw new BaseException(INVALID_JWT);
         }
-
-        // userIdx 추출
-        return claims.getBody().get("adminId", Long.class);
     }
 }
