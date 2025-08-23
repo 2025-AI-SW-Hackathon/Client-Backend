@@ -50,5 +50,5 @@ public class FileAnnotationDoc {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class Size { private double width; private double height; }
 
-    public enum Source { PPT, MANUAL }
+    public enum Source { PPT, MANUAL,PDF }
 }
