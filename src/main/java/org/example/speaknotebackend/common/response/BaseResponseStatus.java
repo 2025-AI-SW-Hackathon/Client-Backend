@@ -271,7 +271,8 @@ public enum BaseResponseStatus {
     REQUEST_IS_ALREADY_BEING_PROCESSED_ERROR(false, BAD_REQUEST.value(), "해당 요청이 이미 처리중입니다."),
     GET_LOCKING_ERROR(false, BAD_REQUEST.value(), "락 획득 중 에러가 발생했습니다."),
     LOCK_NOT_FOUND_ERROR(false, BAD_REQUEST.value(), "락이 존재하지 않습니다."),
-    RELEASE_LOCKING_ERROR(false, BAD_REQUEST.value(), "현재 쓰레드에서 획득한 잠금이 아니므로 락 해제가 불가능합니다.");
+    RELEASE_LOCKING_ERROR(false, BAD_REQUEST.value(), "현재 쓰레드에서 획득한 잠금이 아니므로 락 해제가 불가능합니다."),
+    FILE_FAIL_UPLOAD(false,BAD_REQUEST.value() ,"파일 저장에 실패하였습니다" );
 
     private final boolean isSuccess;
     private final int code;
