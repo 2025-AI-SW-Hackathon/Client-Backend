@@ -38,7 +38,7 @@ public class PdfService {
     private String fastapiBaseUrl;
 
     @Transactional
-    public String saveTempPDF(MultipartFile file, Long userId) {
+    public Long saveTempPDF(MultipartFile file,Long userId) {
         try {
             // 저장할 임시 폴더 경로
             Path uploadDir = Paths.get(storageDir);
@@ -71,9 +71,8 @@ public class PdfService {
                    LectureFile lectureFile1 = lectureFileRepository.save(lectureFile);
                 }
             }
-
             // 저장한 파일 ID 반환
-            return storedFileName;
+            return lectureFile1.getId();
         } catch (IOException e) {
             throw new BaseException(BaseResponseStatus.FILE_FAIL_UPLOAD);
         }
