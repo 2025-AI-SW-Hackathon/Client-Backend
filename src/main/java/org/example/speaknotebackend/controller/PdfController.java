@@ -8,12 +8,11 @@ import org.example.speaknotebackend.service.PdfService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.example.speaknotebackend.config.UserDetailsImpl;
 
+import java.io.Serializable;
 import java.util.Map;
 
 @RestController
@@ -28,11 +27,11 @@ public class PdfController {
             description = "사용자가 업로드한 PDF 파일을 서버의 temp 디렉토리에 저장합니다."
     )
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, String>> uploadForModeling(@RequestParam("file") MultipartFile file,
-                                                                 @AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<Map<String, Serializable>> uploadForModeling(@RequestParam("file") MultipartFile file,
+                                                                       @AuthenticationPrincipal UserDetailsImpl userDetails) {
        //TODO: 하드 코딩
-        Long userId = 3L;
-        String fileId = pdfService.saveTempPDF(file,userId);
+        Long userId = userDetails.getUserId();
+        Long fileId = pdfService.saveTempPDF(file,userId);
 
         String fastApiResponse = pdfService.sendPdfFileToFastAPI(file);  //응답 받아오기
         System.out.println("FastAPI 응답: " + fastApiResponse);  //로그 출력
