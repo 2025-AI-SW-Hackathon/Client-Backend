@@ -1,7 +1,6 @@
 package org.example.speaknotebackend.service;
 
 import lombok.RequiredArgsConstructor;
-
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.repository.LectureFileRepository;
@@ -20,87 +19,93 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class PdfService {
 
-
     @Value("${custom.pdf.storage-dir}")
-    private String storageDir; // 환경별로 경로 다르게 설정 가능
+    private String storageDir; // 저장 폴더(환경별 설정)
 
     @Value("${custom.pdf.allowed-origin}")
-    private String fastapiBaseUrl;
+    private String fastapiBaseUrl; // 예: http://localhost:8000/upload
+
+    private final UserService userService;
+    private final UserRepository userRepository;
+    private final LectureFileRepository lectureFileRepository;
 
     @Transactional
-    public Long saveTempPDF(MultipartFile file,Long userId) {
+    public Long saveTempPDF(MultipartFile file, Long userId) {
         try {
-            // 저장할 임시 폴더 경로
             Path uploadDir = Paths.get(storageDir);
-
-            // 폴더가 없다면 생성
             if (!Files.exists(uploadDir)) {
                 Files.createDirectories(uploadDir);
             }
 
-            // UUID + 원래 파일명
             String originalName = file.getOriginalFilename();
             String uuid = UUID.randomUUID().toString();
-            String storedFileName = uuid + "_" + originalName;
+            String storedFileName = uuid + "_" + (originalName == null ? "uploaded.pdf" : originalName);
             Path filePath = uploadDir.resolve(storedFileName);
 
-            // 파일 저장
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            // 사용자 정보가 있는 경우에만 LectureFile 엔티티 생성
             if (userId != null) {
                 User user = userRepository.findById(userId).orElse(null);
                 if (user != null) {
-                    // LectureFile 엔티티 생성
                     LectureFile lectureFile = LectureFile.builder()
                             .user(user)
                             .fileName(storedFileName)
-                            .fileUrl(filePath.toString()) // 또는 배포 시 URL
+                            .fileUrl(filePath.toString()) // 필요 시 공개 URL/Signed URL로 대체
                             .build();
-
-                   LectureFile lectureFile1 = lectureFileRepository.save(lectureFile);
-                    return lectureFile1.getId();
-                }
-                else{
-                    return null;
+                    LectureFile saved = lectureFileRepository.save(lectureFile);
+                    return saved.getId();
                 }
             }
-            else {return null;}
+            // 비로그인/유저없음인 경우엔 null 리턴(컨트롤러에서 처리)
+            return null;
 
-            // 저장한 파일 ID 반환
         } catch (IOException e) {
             throw new BaseException(BaseResponseStatus.FILE_FAIL_UPLOAD);
         }
     }
 
-    public String sendPdfFileToFastAPI(MultipartFile file) {
+    /**
+     * FastAPI로 파일 + userId + fileId를 multipart/form-data로 전송
+     */
+    public String sendPdfFileToFastAPI(MultipartFile file, Long userId, Long fileId) {
         try {
-            String boundary = "----SpringToFastAPI";
+            String boundary = "----SpringToFastAPI" + System.currentTimeMillis();
             HttpClient client = HttpClient.newHttpClient();
 
-            String fileName = file.getOriginalFilename();
-            String mimeType = file.getContentType();
-            byte[] fileBytes = file.getBytes();
+            // part: 일반 폼 필드 생성기
+            byte[] userIdPart = buildFormField(boundary, "userId", userId == null ? "" : String.valueOf(userId));
+            byte[] fileIdPart = buildFormField(boundary, "fileId", fileId == null ? "" : String.valueOf(fileId));
 
-            String bodyHeader = "--" + boundary + "\r\n" +
-                    "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n" +
-                    "Content-Type: " + mimeType + "\r\n\r\n";
-            String bodyFooter = "\r\n--" + boundary + "--\r\n";
+            // part: 파일
+            String fileName = file.getOriginalFilename() == null ? "uploaded.pdf" : file.getOriginalFilename();
+            String mimeType = file.getContentType() == null ? "application/pdf" : file.getContentType();
+
+            byte[] fileHeader = (
+                    "--" + boundary + "\r\n" +
+                            "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n" +
+                            "Content-Type: " + mimeType + "\r\n\r\n"
+            ).getBytes(StandardCharsets.UTF_8);
+
+            byte[] fileBytes = file.getBytes();
+            byte[] fileTail = "\r\n".getBytes(StandardCharsets.UTF_8);
+
+            byte[] endBoundary = ("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
 
             byte[] requestBody = concatenate(
-                    bodyHeader.getBytes(),
-                    fileBytes,
-                    bodyFooter.getBytes()
+                    userIdPart,
+                    fileIdPart,
+                    fileHeader, fileBytes, fileTail,
+                    endBoundary
             );
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -109,7 +114,6 @@ public class PdfService {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody))
                     .build();
 
-            // 동기 호출
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             return response.body();
 
@@ -119,6 +123,15 @@ public class PdfService {
         }
     }
 
+    /** 일반 텍스트 필드 part */
+    private byte[] buildFormField(String boundary, String name, String value) {
+        String part =
+                "--" + boundary + "\r\n" +
+                        "Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" +
+                        (value == null ? "" : value) + "\r\n";
+        return part.getBytes(StandardCharsets.UTF_8);
+    }
+
     private byte[] concatenate(byte[]... parts) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         for (byte[] part : parts) {
@@ -126,9 +139,4 @@ public class PdfService {
         }
         return outputStream.toByteArray();
     }
-
-
-    private final UserService userService;
-    private final UserRepository userRepository;
-    private final LectureFileRepository lectureFileRepository;
 }
