@@ -1,14 +1,13 @@
 package org.example.speaknotebackend.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-// ===== STT 비활성화 모드에서는 아래 import들이 사용되지 않을 수 있음 =====
-// import com.google.api.gax.grpc.GrpcCallContext;
-// import com.google.api.gax.rpc.BidiStreamObserver;
-// import com.google.api.gax.rpc.ClientStream;
-// import com.google.api.gax.rpc.StreamController;
-// import com.google.auth.oauth2.GoogleCredentials;
-// import com.google.cloud.speech.v1.*;
-// import com.google.protobuf.ByteString;
+ import com.google.api.gax.grpc.GrpcCallContext;
+ import com.google.api.gax.rpc.BidiStreamObserver;
+ import com.google.api.gax.rpc.ClientStream;
+ import com.google.api.gax.rpc.StreamController;
+ import com.google.auth.oauth2.GoogleCredentials;
+ import com.google.cloud.speech.v1.*;
+ import com.google.protobuf.ByteString;
 
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.util.SttTextBuffer;
