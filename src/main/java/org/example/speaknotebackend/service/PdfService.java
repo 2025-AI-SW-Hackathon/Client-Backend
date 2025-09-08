@@ -69,10 +69,15 @@ public class PdfService {
                             .build();
 
                    LectureFile lectureFile1 = lectureFileRepository.save(lectureFile);
+                    return lectureFile1.getId();
+                }
+                else{
+                    return null;
                 }
             }
+            else {return null;}
+
             // 저장한 파일 ID 반환
-            return lectureFile1.getId();
         } catch (IOException e) {
             throw new BaseException(BaseResponseStatus.FILE_FAIL_UPLOAD);
         }

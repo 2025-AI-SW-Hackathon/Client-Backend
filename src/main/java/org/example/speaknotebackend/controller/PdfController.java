@@ -28,15 +28,15 @@ public class PdfController {
             description = "사용자가 업로드한 PDF 파일을 서버의 temp 디렉토리에 저장합니다."
     )
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, String>> uploadForModeling(@RequestParam("file") MultipartFile file,
-                                                                 @AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<Map<String, Serializable>> uploadForModeling(@RequestParam("file") MultipartFile file,
+                                                                 @AuthenticationPrincipal UserDetailsImpl userDetails) {
         // 인증된 사용자가 있으면 userId 사용, 없으면 null (게스트)
         Long userId = null;
-        if (userDetails != null && userDetails instanceof org.example.speaknotebackend.config.UserDetailsImpl) {
-            userId = ((org.example.speaknotebackend.config.UserDetailsImpl) userDetails).getUserId();
+        if (userDetails != null) {
+            userId = userDetails.getUserId();
         }
         
-        String fileId = pdfService.saveTempPDF(file, userId);
+        Long fileId = pdfService.saveTempPDF(file, userId);
         String fastApiResponse = pdfService.sendPdfFileToFastAPI(file);  //응답 받아오기
         System.out.println("FastAPI 응답: " + fastApiResponse);  //로그 출력
 
@@ -64,7 +64,7 @@ public class PdfController {
             status = "error";
         }
 
-        Map<String, String> response = new HashMap<>();
+        Map<String, Serializable> response = new HashMap<>();
         response.put("fileId", fileId);
         response.put("status", status);
         if (errorMessage != null) {
