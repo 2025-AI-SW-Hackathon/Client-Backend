@@ -47,9 +47,9 @@ public class PdfService {
                 Files.createDirectories(uploadDir);
             }
 
-            String originalName = file.getOriginalFilename();
-            String uuid = UUID.randomUUID().toString();
-            String storedFileName = uuid + "_" + (originalName == null ? "uploaded.pdf" : originalName);
+
+            // 원래 파일명
+            String storedFileName = file.getOriginalFilename();
             Path filePath = uploadDir.resolve(storedFileName);
 
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
@@ -58,7 +58,7 @@ public class PdfService {
                 User user = userRepository.findById(userId).orElse(null);
                 if (user != null) {
                     LectureFile lectureFile = LectureFile.builder()
-                            .user(user)
+                            .uuid(UUID.randomUUID().toString())
                             .fileName(storedFileName)
                             .fileUrl(filePath.toString()) // 필요 시 공개 URL/Signed URL로 대체
                             .build();
