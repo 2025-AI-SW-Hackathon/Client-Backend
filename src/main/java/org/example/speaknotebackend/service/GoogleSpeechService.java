@@ -9,7 +9,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.speech.v1.*;
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
+import org.example.speaknotebackend.config.UserDetailsImpl;
 import org.example.speaknotebackend.util.SttTextBuffer;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -73,7 +75,7 @@ public class GoogleSpeechService {
     /**
      * Google STT 스트리밍을 시작한다.
      */
-    public void startStreaming(WebSocketSession session) {
+    public void startStreaming(WebSocketSession session,Long fileId) {
         try {
             if (scheduledTask != null && !scheduledTask.isDone()) {
                 log.warn("이미 스케줄러가 실행 중입니다.");
@@ -85,11 +87,12 @@ public class GoogleSpeechService {
             // 30초마다 누적 텍스트 전송
             scheduledTask = scheduler.scheduleAtFixedRate(() -> {
                 String context = textBuffer.getAccumulatedContextAndClear();
+                String sessionId = session.getId();
                 log.warn("[AI 전송] 누적 context: {}", context);
                 if (context != null && !context.isBlank()) {
                     try {
                         // TODO AI 서버 켠 후 활성화하면 됨
-                        Map<String,Object> result = textRefineService.refine(context);
+                        Map<String,Object> result = textRefineService.refine(context,fileId,sessionId);
                         log.info("AI 서버 정제 결과: {}", result);
 
                         Map<String, Object> payload = new HashMap<>();
@@ -223,7 +226,7 @@ public class GoogleSpeechService {
      * 프론트엔드에서 수신한 오디오 chunk를 실시간으로 Google STT 서버에 전송한다.
      * @param audioBytes 오디오 chunk (LINEAR16 PCM)
      */
-    public void sendAudioChunk(byte[] audioBytes) {
+    public void sendAudioChunk(WebSocketSession session,byte[] audioBytes,Long fileId) {
         if (!streamingStarted.get() || requestStream == null) return;
 
         try {
@@ -239,7 +242,7 @@ public class GoogleSpeechService {
     /**
      * 스트리밍 세션을 종료하고 리소스를 해제한다.
      */
-    public void stopStreaming() {
+    public void stopStreaming(WebSocketSession session) {
         try {
             if (requestStream != null) {
                 requestStream.closeSend();
