@@ -3,7 +3,7 @@ package org.example.speaknotebackend.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.config.UserDetailsImpl;
-import org.example.speaknotebackend.domain.repository.FileItemRepository;
+import org.example.speaknotebackend.domain.repository.LectureFileRepository;
 import org.example.speaknotebackend.dto.AnnotationVersionListResponse;
 import org.example.speaknotebackend.dto.FileAnnotationResponse;
 import org.example.speaknotebackend.entity.LectureFile;
@@ -30,6 +30,7 @@ import java.nio.file.Paths;
 public class FileAnnotationQueryController {
 
     private final FileAnnotationQueryService service;
+    private final LectureFileRepository lectureFileRepository;
 
     /** 최신 또는 특정 버전 주석 + 파일 메타 조회 */
     @GetMapping("/{fileId}/annotations")
@@ -60,7 +61,7 @@ public class FileAnnotationQueryController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
 
-        LectureFile file = fileItemRepository.findByIdAndUserId(fileId, user.getUserId())
+        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, user.getUserId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."));
 
         // 예시: file.getFileUrl()이 로컬 경로나 S3 키일 수 있음
@@ -83,6 +84,4 @@ public class FileAnnotationQueryController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "파일 읽기 실패");
         }
     }
-
-    private final FileItemRepository fileItemRepository;
 }

@@ -1,9 +1,8 @@
 package org.example.speaknotebackend.service;
 
 import lombok.RequiredArgsConstructor;
-import org.apache.tomcat.util.http.fileupload.FileItem;
 import org.example.speaknotebackend.domain.repository.FileAnnotationRepository;
-import org.example.speaknotebackend.domain.repository.FileItemRepository;
+import org.example.speaknotebackend.domain.repository.LectureFileRepository;
 import org.example.speaknotebackend.dto.AnnotationVersionItem;
 import org.example.speaknotebackend.dto.AnnotationVersionListResponse;
 import org.example.speaknotebackend.dto.FileAnnotationResponse;
@@ -19,12 +18,12 @@ import static org.springframework.http.HttpStatus.*;
 @RequiredArgsConstructor
 public class FileAnnotationQueryService {
 
-    private final FileItemRepository fileItemRepository;
+    private final LectureFileRepository lectureFileRepository;
     private final FileAnnotationRepository annotationRepo;
 
     public FileAnnotationResponse getFileWithAnnotations(Long fileId, Long userId, Integer versionOpt) {
         // 1) 파일 권한 검증
-        LectureFile file = fileItemRepository.findByIdAndUserId(fileId, userId)
+        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, userId)
                 .orElseThrow(() -> new ResponseStatusException(FORBIDDEN, "접근 권한이 없습니다."));
 
         // 2) 버전 선택
@@ -49,7 +48,7 @@ public class FileAnnotationQueryService {
     /** 파일의 버전 목록 조회 (최신 → 과거) */
     public AnnotationVersionListResponse listVersions(Long fileId, Long userId) {
         // 파일 권한 체크
-        fileItemRepository.findByIdAndUserId(fileId, userId)
+        lectureFileRepository.findByIdAndOwner(fileId, userId)
                 .orElseThrow(() -> new ResponseStatusException(FORBIDDEN, "접근 권한이 없습니다."));
 
         List<FileAnnotationDoc> docs = annotationRepo.findByFileIdAndUserIdOrderByVersionDesc(fileId, userId);

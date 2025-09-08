@@ -1,0 +1,22 @@
+package org.example.speaknotebackend.entity;
+
+
+import jakarta.persistence.*;
+import lombok.*;
+
+@Entity
+@Table(name = "folder")
+@Getter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Folder extends BaseEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+}
