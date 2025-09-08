@@ -176,7 +176,41 @@ public class GoogleSpeechService {
         }
     }
 
-    // STT 비활성화 모드에선 호출돼도 noop
+    /**
+     * 초기 STT 환경설정 요청을 Google에 전송한다.
+     * - 샘플레이트, 인코딩, 언어 등
+     */
+    private void sendInitialRequest() {
+        try {
+            RecognitionConfig recognitionConfig = RecognitionConfig.newBuilder()
+                    .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
+                    .setSampleRateHertz(16000)
+                    .setLanguageCode("ko-KR") // 기본 언어 : 한국어
+                    .setEnableAutomaticPunctuation(true) // 자동 문장부호 활성화
+                    .build();
+
+            StreamingRecognitionConfig streamingConfig = StreamingRecognitionConfig.newBuilder()
+                    .setConfig(recognitionConfig)
+                    .setInterimResults(true)    // 중간 인식 결과 포함
+                    .setSingleUtterance(false)  // 단일 발화로 자동 종료 X
+                    .build();
+
+            StreamingRecognizeRequest initialRequest = StreamingRecognizeRequest.newBuilder()
+                    .setStreamingConfig(streamingConfig)
+                    .build();
+
+            requestStream.send(initialRequest);
+            log.info("STT 초기 설정 전송 완료");
+
+        } catch (Exception e) {
+            log.error("STT 초기 요청 전송 실패", e);
+        }
+    }
+
+    /**
+     * 프론트엔드에서 수신한 오디오 chunk를 실시간으로 Google STT 서버에 전송한다.
+     * @param audioBytes 오디오 chunk (LINEAR16 PCM)
+     */
     public void sendAudioChunk(byte[] audioBytes) {
         if (!sttEnabled) return;
         // if (!streamingStarted.get() || requestStream == null) return;
