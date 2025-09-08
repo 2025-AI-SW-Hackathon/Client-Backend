@@ -48,10 +48,8 @@ public class PdfService {
                 Files.createDirectories(uploadDir);
             }
 
-            // UUID + 원래 파일명
-            String originalName = file.getOriginalFilename();
-            String uuid = UUID.randomUUID().toString();
-            String storedFileName = uuid + "_" + originalName;
+            // 원래 파일명
+            String storedFileName = file.getOriginalFilename();
             Path filePath = uploadDir.resolve(storedFileName);
 
             // 파일 저장
@@ -63,7 +61,7 @@ public class PdfService {
                 if (user != null) {
                     // LectureFile 엔티티 생성
                     LectureFile lectureFile = LectureFile.builder()
-                            .user(user)
+                            .uuid(UUID.randomUUID().toString())
                             .fileName(storedFileName)
                             .fileUrl(filePath.toString()) // 또는 배포 시 URL
                             .build();
