@@ -39,7 +39,7 @@ public class FileAnnotationQueryService {
                 .orElse(false);
 
         // 4) 파일 URL (이미 publicUrl 있으면 그대로, 아니면 사전서명 생성 로직 연결)
-        String fileUrl = file.getFileUrl(); // 필요 시 별도 SignedUrlService 통해 생성
+        String fileUrl = file.getFileUrl()+"/"+file.getUuid()+"_"+file.getFileName(); // 필요 시 별도 SignedUrlService 통해 생성
 
         // 5) 매핑
         return mapToResponse(file, doc, latest);
@@ -71,7 +71,7 @@ public class FileAnnotationQueryService {
         return FileAnnotationResponse.builder()
                 .fileId(f.getId())
                 .fileName(f.getFileName())
-                .fileUrl(f.getFileUrl())      // 바로 react-pdf/pdf.js에 넣으면 됨
+                .fileUrl(f.getFileUrl()+"/"+f.getUuid()+"/"+f.getFileName())      // 바로 react-pdf/pdf.js에 넣으면 됨
                 .snapshotCreatedAt(d.getCreatedAt())
                 .version(d.getVersion())
                 .latest(latest)
