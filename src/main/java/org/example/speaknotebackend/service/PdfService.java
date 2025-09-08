@@ -38,7 +38,7 @@ public class PdfService {
     private String fastapiBaseUrl;
 
     @Transactional
-    public String saveTempPDF(MultipartFile file,Long userId) {
+    public String saveTempPDF(MultipartFile file, Long userId) {
         try {
             // 저장할 임시 폴더 경로
             Path uploadDir = Paths.get(storageDir);
@@ -57,16 +57,21 @@ public class PdfService {
             // 파일 저장
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            User user=userRepository.findById(userId).orElseThrow(()-> new BaseException(BaseResponseStatus.USER_NOT_FOUND));
+            // 사용자 정보가 있는 경우에만 LectureFile 엔티티 생성
+            if (userId != null) {
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null) {
+                    // LectureFile 엔티티 생성
+                    LectureFile lectureFile = LectureFile.builder()
+                            .user(user)
+                            .fileName(storedFileName)
+                            .fileUrl(filePath.toString()) // 또는 배포 시 URL
+                            .build();
 
-            // LectureFile 엔티티 생성
-            LectureFile lectureFile = LectureFile.builder()
-                    .user(user)
-                    .fileName(storedFileName)
-                    .fileUrl(filePath.toString()) // 또는 배포 시 URL
-                    .build();
+                   LectureFile lectureFile1 = lectureFileRepository.save(lectureFile);
+                }
+            }
 
-//            LectureFile lectureFile1 = lectureFileRepository.save(lectureFile);
             // 저장한 파일 ID 반환
             return storedFileName;
         } catch (IOException e) {

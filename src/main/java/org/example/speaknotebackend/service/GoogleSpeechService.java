@@ -198,6 +198,7 @@ public class GoogleSpeechService {
                     .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
                     .setSampleRateHertz(16000)
                     .setLanguageCode("ko-KR") // 기본 언어 : 한국어
+                    .setEnableAutomaticPunctuation(true) // 자동 문장부호 활성화
                     .build();
 
             StreamingRecognitionConfig streamingConfig = StreamingRecognitionConfig.newBuilder()
