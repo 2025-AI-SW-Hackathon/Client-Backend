@@ -30,47 +30,41 @@ public class PdfController {
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Serializable>> uploadForModeling(@RequestParam("file") MultipartFile file,
                                                                  @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        // 인증된 사용자가 있으면 userId 사용, 없으면 null (게스트)
-        Long userId = null;
-        if (userDetails != null) {
-            userId = userDetails.getUserId();
-        }
-        
-        Long fileId = pdfService.saveTempPDF(file, userId);
-        String fastApiResponse = pdfService.sendPdfFileToFastAPI(file);  //응답 받아오기
-        System.out.println("FastAPI 응답: " + fastApiResponse);  //로그 출력
+        // 인증 사용자면 userId, 아니면 null(게스트)
+        final Long userId = (userDetails != null) ? userDetails.getUserId() : null;
+
+        // 파일 저장(로그인 사용자는 LectureFile 생성됨)
+        final Long fileId = pdfService.saveTempPDF(file, userId);
+
+        // ⬇️ FastAPI로 파일 + userId + fileId 함께 전송
+        final String fastApiResponse = pdfService.sendPdfFileToFastAPI(file, userId, fileId);
+        System.out.println("FastAPI 응답: " + fastApiResponse);
 
         String status = "error";
         String errorMessage = null;
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode jsonNode = mapper.readTree(fastApiResponse);
-            
-            // FastAPI에서 에러 응답인지 확인
-            if (jsonNode.has("error")) {
-                errorMessage = jsonNode.get("error").asText();
-                System.out.println("FastAPI 에러: " + errorMessage);
+            JsonNode json = mapper.readTree(fastApiResponse);
+            if (json.has("error")) {
+                errorMessage = json.get("error").asText();
                 status = "error";
-            } else if (jsonNode.has("status")) {
-                status = jsonNode.get("status").asText();
-                System.out.println("FastAPI 응답 상태: " + status);
+            } else if (json.has("status")) {
+                status = json.get("status").asText(); // FastAPI가 status 주면 그대로 사용
             } else {
-                System.out.println("FastAPI 응답에 status 필드가 없습니다: " + fastApiResponse);
-                status = "error";
+                // 상태 필드가 없으면 기본값
+                status = "ready";
             }
         } catch (Exception e) {
             System.out.println("FastAPI 응답 파싱 에러: " + e.getMessage());
-            e.printStackTrace();
             status = "error";
+            errorMessage = "FastAPI response parse error";
         }
 
-        Map<String, Serializable> response = new HashMap<>();
-        response.put("fileId", fileId);
-        response.put("status", status);
-        if (errorMessage != null) {
-            response.put("error", errorMessage);
-        }
-        
-        return ResponseEntity.ok(response);
+        Map<String, Serializable> resp = new HashMap<>();
+        resp.put("fileId", fileId);
+        resp.put("status", status);
+        if (errorMessage != null) resp.put("error", errorMessage);
+
+        return ResponseEntity.ok(resp);
     }
 }

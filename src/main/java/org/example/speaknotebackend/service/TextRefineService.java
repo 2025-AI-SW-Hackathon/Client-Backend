@@ -2,11 +2,13 @@ package org.example.speaknotebackend.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.speaknotebackend.config.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -23,13 +25,18 @@ public class TextRefineService {
      * @param originalText Google STT로부터 받은 원본 텍스트
      * @return 정제 요청 결과 상태 문자열: [정제 성공], [정제 실패], [정제 오류]
      */
-    public Map<String,Object> refine(String originalText) {
-
+    public Map<String,Object> refine(String originalText,Long fileId,String sessionId) {
         HttpHeaders headers = new org.springframework.http.HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+// ✅ fileId 함께 전송
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("text", originalText);
+        payload.put("fileId", fileId); // null 가능
+        payload.put("sessionId", sessionId); // null 가능
 
-        HttpEntity<Map<String, String>> request = new HttpEntity<>(
-                Map.of("text", originalText), headers
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(
+                payload, headers
         );
 
         try {
