@@ -18,7 +18,7 @@ public class UserDetailsImpl implements UserDetails {
     private final List<? extends GrantedAuthority> authorities;
 
     public UserDetailsImpl(Long userId, String email, String name,
-                           List<? extends GrantedAuthority> authorities) {
+                           List<? extends GrantedAuthority> authorities ) {
         this.userId = userId;
         this.email = email;
         this.name = name;
@@ -36,6 +36,7 @@ public class UserDetailsImpl implements UserDetails {
     public String getName() {
         return name;
     }
+
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

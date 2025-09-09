@@ -2,6 +2,9 @@ package org.example.speaknotebackend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -27,9 +30,14 @@ public class Lecture extends BaseEntity {
     @Column(length = 10, nullable = false)
     private String language;
 
+    @CreationTimestamp
     @Column(nullable = false)
     private LocalDateTime startedAt;
 
+    @Column(name="lecture_name",length =20,nullable = false)
+    private String lectureName; // 생각해보니 파일에 들어가서 이름 수정하는 거 에바인 거 같아서 저장된 이름을 수정한느게 아니라 보이는 용도의 이름을 설정해야될듯.
+
+    @UpdateTimestamp
     private LocalDateTime endedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -37,7 +45,7 @@ public class Lecture extends BaseEntity {
     private User user;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "file_id", nullable = false, unique = true)
+    @JoinColumn(name = "file_id",  unique = true)
     private LectureFile lectureFile;
 
     @ManyToOne(fetch = FetchType.LAZY)

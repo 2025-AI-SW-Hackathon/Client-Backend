@@ -3,9 +3,11 @@ package org.example.speaknotebackend.service;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.domain.repository.FileAnnotationRepository;
 import org.example.speaknotebackend.domain.repository.LectureFileRepository;
+import org.example.speaknotebackend.domain.repository.LectureRepository;
 import org.example.speaknotebackend.dto.AnnotationVersionItem;
 import org.example.speaknotebackend.dto.AnnotationVersionListResponse;
 import org.example.speaknotebackend.dto.FileAnnotationResponse;
+import org.example.speaknotebackend.entity.Lecture;
 import org.example.speaknotebackend.entity.LectureFile;
 import org.example.speaknotebackend.mongo.annotation.FileAnnotationDoc;
 import org.springframework.stereotype.Service;
@@ -23,7 +25,8 @@ public class FileAnnotationQueryService {
 
     public FileAnnotationResponse getFileWithAnnotations(Long fileId, Long userId, Integer versionOpt) {
         // 1) 파일 권한 검증
-        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, userId)
+//        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, userId)
+          LectureFile file = lectureFileRepository.findById(fileId)
                 .orElseThrow(() -> new ResponseStatusException(FORBIDDEN, "접근 권한이 없습니다."));
 
         // 2) 버전 선택
@@ -48,7 +51,8 @@ public class FileAnnotationQueryService {
     /** 파일의 버전 목록 조회 (최신 → 과거) */
     public AnnotationVersionListResponse listVersions(Long fileId, Long userId) {
         // 파일 권한 체크
-        lectureFileRepository.findByIdAndOwner(fileId, userId)
+//        lectureFileRepository.findByIdAndOwner(fileId, userId)
+        LectureFile file = lectureFileRepository.findById(fileId)
                 .orElseThrow(() -> new ResponseStatusException(FORBIDDEN, "접근 권한이 없습니다."));
 
         List<FileAnnotationDoc> docs = annotationRepo.findByFileIdAndUserIdOrderByVersionDesc(fileId, userId);
@@ -68,10 +72,11 @@ public class FileAnnotationQueryService {
                 .build();
     }
     private FileAnnotationResponse mapToResponse(LectureFile f, FileAnnotationDoc d, boolean latest) {
+        Lecture lecture = lectureRepository.findByLectureFile_Id(f.getId());
         return FileAnnotationResponse.builder()
                 .fileId(f.getId())
-                .fileName(f.getFileName())
-                .fileUrl(f.getFileUrl()+"/"+f.getUuid()+"/"+f.getFileName())      // 바로 react-pdf/pdf.js에 넣으면 됨
+                .fileName(lecture.getLectureName())
+                .fileUrl(f.getFileUrl()+"/"+f.getUuid()+"_"+f.getFileName())      // 바로 react-pdf/pdf.js에 넣으면 됨
                 .snapshotCreatedAt(d.getCreatedAt())
                 .version(d.getVersion())
                 .latest(latest)
@@ -105,5 +110,6 @@ public class FileAnnotationQueryService {
                 .build();
     }
 
+    private final LectureRepository lectureRepository;
 }
 

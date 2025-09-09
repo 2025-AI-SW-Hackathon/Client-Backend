@@ -11,6 +11,7 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
     List<Folder> findByUserIdAndStatus(Long userId, BaseEntity.Status status);
 
     Optional<Folder> findByUserIdAndIdAndStatus(Long userId, Long folderId, BaseEntity.Status status);
+  
+    Folder findFirstByUserIdAndBasic(Long userId,Boolean True);
+
 }
-
-

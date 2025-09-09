@@ -22,6 +22,7 @@ public class GoogleUser implements SocialUser {
     public String familyName;
     public String picture;
     public String locale;
+    public Long folderId;
 
     @Override
     public String getSocialId() {
@@ -37,6 +38,9 @@ public class GoogleUser implements SocialUser {
     public String getName() {
         return this.name;
     }
+
+    @Override
+    public Long getFolderId() {return this.folderId;}
 
     @Override
     public SocialInfoRes toSocialInfoRes(SocialTermsAgreementResponse termsAgreements) {

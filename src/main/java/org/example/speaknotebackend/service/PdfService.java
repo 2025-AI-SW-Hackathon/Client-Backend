@@ -3,9 +3,14 @@ package org.example.speaknotebackend.service;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
+import org.example.speaknotebackend.config.UserDetailsImpl;
+import org.example.speaknotebackend.domain.repository.FolderRepository;
 import org.example.speaknotebackend.domain.repository.LectureFileRepository;
+import org.example.speaknotebackend.domain.repository.LectureRepository;
 import org.example.speaknotebackend.domain.repository.UserRepository;
 import org.example.speaknotebackend.domain.user.UserService;
+import org.example.speaknotebackend.entity.Folder;
+import org.example.speaknotebackend.entity.Lecture;
 import org.example.speaknotebackend.entity.LectureFile;
 import org.example.speaknotebackend.entity.User;
 import org.springframework.beans.factory.annotation.Value;
@@ -58,12 +63,25 @@ public class PdfService {
             if (userId != null) {
                 User user = userRepository.findById(userId).orElse(null);
                 if (user != null) {
+                    Folder folder = folderRepository.findFirstByUserIdAndBasic(user.getId(),true);
                     LectureFile lectureFile = LectureFile.builder()
                             .uuid(uuid)
                             .fileName(storedFileName)
                             .fileUrl(realfilePath.toString()) // 필요 시 공개 URL/Signed URL로 대체
                             .build();
                     LectureFile saved = lectureFileRepository.save(lectureFile);
+                    Lecture lecture = Lecture.builder()
+                            .lectureFile(saved)
+                            .summary("test용")
+                            .tags("ai,데이터베이스,ML")
+                            .folder(folder)
+                            .lectureName(storedFileName)
+                            .language("ko")
+                            .user(user)
+                            .build();
+                    Lecture lecture1 = lectureRepository.save(lecture);
+                    System.out.println(lecture1);
+                    System.out.println(lecture1.getEndedAt());
                     return saved.getId();
                 }
             }
@@ -108,7 +126,6 @@ public class PdfService {
                     fileHeader, fileBytes, fileTail,
                     endBoundary
             );
-
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(fastapiBaseUrl))
                     .header("Content-Type", "multipart/form-data; boundary=" + boundary)
@@ -140,4 +157,7 @@ public class PdfService {
         }
         return outputStream.toByteArray();
     }
+
+    private final LectureRepository lectureRepository;
+    private final FolderRepository folderRepository;
 }
