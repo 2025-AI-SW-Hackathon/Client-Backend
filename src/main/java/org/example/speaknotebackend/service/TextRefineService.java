@@ -3,6 +3,9 @@ package org.example.speaknotebackend.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.config.UserDetailsImpl;
+import org.example.speaknotebackend.domain.repository.LectureRepository;
+import org.example.speaknotebackend.entity.Lecture;
+import org.example.speaknotebackend.entity.LectureFile;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -27,12 +30,14 @@ public class TextRefineService {
      */
     public Map<String,Object> refine(String originalText,Long fileId,String sessionId) {
         HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        Lecture lecture = lectureRepository.findByLectureFile_Id(fileId);
+        Long userId = lecture.getUser().getId();
         headers.setContentType(MediaType.APPLICATION_JSON);
 // ✅ fileId 함께 전송
         Map<String, Object> payload = new HashMap<>();
         payload.put("text", originalText);
         payload.put("fileId", fileId); // null 가능
-        payload.put("sessionId", sessionId); // null 가능
+        payload.put("userId", String.valueOf(userId));
 
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(
@@ -56,4 +61,6 @@ public class TextRefineService {
                 "refinedMarkdown", null
         );
     }
+
+    private final LectureRepository lectureRepository;
 }
