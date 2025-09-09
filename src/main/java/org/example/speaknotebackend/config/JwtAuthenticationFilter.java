@@ -4,6 +4,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.example.speaknotebackend.domain.repository.FolderRepository;
+import org.example.speaknotebackend.entity.Folder;
 import org.example.speaknotebackend.global.JwtService;
 import org.example.speaknotebackend.domain.user.UserService;
 import org.example.speaknotebackend.entity.User;
@@ -25,7 +27,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserService userService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UserService userService) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserService userService ) {
         this.jwtService = jwtService;
         this.userService = userService;
     }
@@ -46,7 +48,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 // 모든 사용자를 ROLE_USER로 간주 (임시)
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
-
                 var principal = new UserDetailsImpl(user.getId(), user.getEmail(), user.getName(), authorities);
                 var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
 

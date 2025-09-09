@@ -4,8 +4,10 @@ package org.example.speaknotebackend.controller;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.config.UserDetailsImpl;
 import org.example.speaknotebackend.domain.repository.LectureFileRepository;
+import org.example.speaknotebackend.domain.repository.LectureRepository;
 import org.example.speaknotebackend.dto.AnnotationVersionListResponse;
 import org.example.speaknotebackend.dto.FileAnnotationResponse;
+import org.example.speaknotebackend.entity.Lecture;
 import org.example.speaknotebackend.entity.LectureFile;
 import org.example.speaknotebackend.service.FileAnnotationQueryService;
 import org.springframework.core.io.InputStreamResource;
@@ -65,9 +67,11 @@ public class FileAnnotationQueryController {
         LectureFile file = lectureFileRepository.findById(fileId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."));
 
+        Lecture lecture = lectureRepository.findByLectureFile_Id(fileId);
+
         // 예시: file.getFileUrl()이 로컬 경로나 S3 키일 수 있음
         // 1) 로컬 파일일 때 (예: /data/uploads/xxx.pdf)
-        Path p = Paths.get(file.getFileUrl()); // 로컬 경로라고 가정
+        Path p = Paths.get(file.getFileUrl()+"/"+file.getUuid()+"_"+file.getFileName()); // 로컬 경로라고 가정
         if (!Files.exists(p)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "파일을 찾을 수 없습니다.");
         }
@@ -75,7 +79,7 @@ public class FileAnnotationQueryController {
         try {
             InputStream is = Files.newInputStream(p);
             InputStreamResource body = new InputStreamResource(is);
-            String filename = file.getFileName() != null ? file.getFileName() : ("file-" + file.getId() + ".pdf");
+            String filename = lecture.getLectureName() != null ? file.getFileName() : ("file-" + file.getId() + ".pdf");
 
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_PDF)
@@ -85,4 +89,6 @@ public class FileAnnotationQueryController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "파일 읽기 실패");
         }
     }
+
+    private final LectureRepository lectureRepository;
 }

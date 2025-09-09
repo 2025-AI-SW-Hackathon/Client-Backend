@@ -4,7 +4,9 @@ package org.example.speaknotebackend.domain.oauth;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.common.exceptions.BaseException;
+import org.example.speaknotebackend.domain.repository.FolderRepository;
 import org.example.speaknotebackend.domain.user.UserService;
+import org.example.speaknotebackend.entity.Folder;
 import org.example.speaknotebackend.entity.SocialType;
 import org.example.speaknotebackend.entity.User;
 import org.example.speaknotebackend.global.JwtService;
@@ -50,6 +52,14 @@ public class OAuthService {
                     socialUser.getSocialId(),
                     socialType
             );
+
+            log.info("새로운 소셜 로그인 사용자에 대한 강의 폴더 생성");
+            Folder folder = Folder.builder()
+                    .user(user)
+                    .folderName("")
+                    .basic(true)
+                    .build();
+            folderRepository.save(folder);
         }
 
         try {
@@ -77,4 +87,6 @@ public class OAuthService {
                 throw new IllegalArgumentException("지원하지 않는 소셜 로그인 타입: " + socialLoginType);
         }
     }
+
+    private final FolderRepository folderRepository;
 }

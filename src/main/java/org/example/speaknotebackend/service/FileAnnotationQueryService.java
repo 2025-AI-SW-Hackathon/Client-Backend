@@ -3,9 +3,11 @@ package org.example.speaknotebackend.service;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.domain.repository.FileAnnotationRepository;
 import org.example.speaknotebackend.domain.repository.LectureFileRepository;
+import org.example.speaknotebackend.domain.repository.LectureRepository;
 import org.example.speaknotebackend.dto.AnnotationVersionItem;
 import org.example.speaknotebackend.dto.AnnotationVersionListResponse;
 import org.example.speaknotebackend.dto.FileAnnotationResponse;
+import org.example.speaknotebackend.entity.Lecture;
 import org.example.speaknotebackend.entity.LectureFile;
 import org.example.speaknotebackend.mongo.annotation.FileAnnotationDoc;
 import org.springframework.stereotype.Service;
@@ -70,10 +72,11 @@ public class FileAnnotationQueryService {
                 .build();
     }
     private FileAnnotationResponse mapToResponse(LectureFile f, FileAnnotationDoc d, boolean latest) {
+        Lecture lecture = lectureRepository.findByLectureFile_Id(f.getId());
         return FileAnnotationResponse.builder()
                 .fileId(f.getId())
-                .fileName(f.getFileName())
-                .fileUrl(f.getFileUrl()+"/"+f.getUuid()+"/"+f.getFileName())      // 바로 react-pdf/pdf.js에 넣으면 됨
+                .fileName(lecture.getLectureName())
+                .fileUrl(f.getFileUrl()+"/"+f.getUuid()+"_"+f.getFileName())      // 바로 react-pdf/pdf.js에 넣으면 됨
                 .snapshotCreatedAt(d.getCreatedAt())
                 .version(d.getVersion())
                 .latest(latest)
@@ -107,5 +110,6 @@ public class FileAnnotationQueryService {
                 .build();
     }
 
+    private final LectureRepository lectureRepository;
 }
 
