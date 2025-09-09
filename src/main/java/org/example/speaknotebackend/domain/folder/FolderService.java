@@ -2,12 +2,15 @@ package org.example.speaknotebackend.domain.folder;
 
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
+import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
 import org.example.speaknotebackend.domain.repository.FolderRepository;
 import org.example.speaknotebackend.domain.user.UserService;
 import org.example.speaknotebackend.entity.Folder;
 import org.example.speaknotebackend.entity.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @RequiredArgsConstructor
 @Service
@@ -27,5 +30,16 @@ public class FolderService {
 
         Folder saved = folderRepository.save(folder);
         return saved;
+    }
+
+    public List<GetFolderListResponse> getFolderList(Long userId) {
+        List<Folder> folders = folderRepository.findByUserId(userId); // TODO : 회원가입 시, 자동으로 "기본" 폴더 생성되는 로직 추가
+
+        return folders.stream()
+                .map(folder -> GetFolderListResponse.builder()
+                        .folderId(folder.getId())
+                        .name(folder.getName())
+                        .build())
+                .toList();
     }
 }

@@ -7,11 +7,12 @@ import org.example.speaknotebackend.common.response.BaseResponse;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
 import org.example.speaknotebackend.config.UserDetailsImpl;
+import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import jakarta.validation.Valid;
 
 import static org.example.speaknotebackend.common.response.BaseResponseStatus.SUCCESS;
 
@@ -28,7 +29,7 @@ public class FolderController {
     )
     @PostMapping
     public BaseResponse<Void> createFolder(
-            @RequestBody CreateFolderRequest request,
+            @Valid @RequestBody CreateFolderRequest request,
             @AuthenticationPrincipal UserDetailsImpl user
     ) {
         if (user == null) {
@@ -37,5 +38,18 @@ public class FolderController {
 
         folderService.createFolder(user.getUserId(), request);
         return new BaseResponse<>(SUCCESS);
+    }
+
+    @Operation(summary = "사용자의 폴더 목록 조회")
+    @GetMapping
+    public BaseResponse<List<GetFolderListResponse>> getFolderList(
+            @AuthenticationPrincipal UserDetailsImpl user
+    ) {
+        if (user == null) {
+            throw new BaseException(BaseResponseStatus.INVALID_USER_JWT);
+        }
+
+        List<GetFolderListResponse> result = folderService.getFolderList(user.getUserId());
+        return new BaseResponse<>(result);
     }
 }
