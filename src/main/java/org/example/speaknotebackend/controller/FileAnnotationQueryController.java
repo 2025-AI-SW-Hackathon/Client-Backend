@@ -61,7 +61,8 @@ public class FileAnnotationQueryController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
 
-        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, user.getUserId())
+//        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, user.getUserId())
+        LectureFile file = lectureFileRepository.findById(fileId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."));
 
         // 예시: file.getFileUrl()이 로컬 경로나 S3 키일 수 있음

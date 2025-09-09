@@ -17,4 +17,6 @@ public interface LectureFileRepository extends JpaRepository<LectureFile, Long> 
     """)
     Optional<LectureFile> findByIdAndOwner(@Param("fileId") Long fileId,
                                            @Param("userId") Long userId);
+
+    Optional<LectureFile> findById(Long fileId);
 }

@@ -108,7 +108,6 @@ public class PdfService {
                     fileHeader, fileBytes, fileTail,
                     endBoundary
             );
-
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(fastapiBaseUrl))
                     .header("Content-Type", "multipart/form-data; boundary=" + boundary)
