@@ -33,7 +33,7 @@ public class FolderService {
     }
 
     public List<GetFolderListResponse> getFolderList(Long userId) {
-        List<Folder> folders = folderRepository.findByUserId(userId); // TODO : 회원가입 시, 자동으로 "기본" 폴더 생성되는 로직 추가
+        List<Folder> folders = folderRepository.findByUserId(userId);
 
         return folders.stream()
                 .map(folder -> GetFolderListResponse.builder()
