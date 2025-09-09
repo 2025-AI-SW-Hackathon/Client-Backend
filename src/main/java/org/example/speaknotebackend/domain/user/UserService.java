@@ -3,8 +3,10 @@ package org.example.speaknotebackend.domain.user;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.common.exceptions.BaseException;
+import org.example.speaknotebackend.domain.repository.FolderRepository;
 import org.example.speaknotebackend.domain.repository.UserRepository;
 import org.example.speaknotebackend.entity.BaseEntity;
+import org.example.speaknotebackend.entity.Folder;
 import org.example.speaknotebackend.entity.SocialType;
 import org.example.speaknotebackend.entity.User;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,7 @@ import static org.example.speaknotebackend.common.response.BaseResponseStatus.US
 public class UserService {
 
     private final UserRepository userRepository;
+    private final FolderRepository folderRepository;
 
     public User findByEmailAndSocialId(String email, String socialId) {
         return userRepository
@@ -40,7 +43,15 @@ public class UserService {
                 .socialId(socialId)
                 .socialType(socialType)
                 .build();
-        
-        return userRepository.save(user);
+
+        User saved = userRepository.save(user);
+
+        // 회원가입 시, 자동으로 "기본" 폴더 생성
+        folderRepository.save(Folder.builder()
+                .user(saved)
+                .name("기본")
+                .build());
+
+        return saved;
     }
 }
