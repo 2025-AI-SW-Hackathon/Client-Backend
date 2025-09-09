@@ -23,7 +23,8 @@ public class FileAnnotationQueryService {
 
     public FileAnnotationResponse getFileWithAnnotations(Long fileId, Long userId, Integer versionOpt) {
         // 1) 파일 권한 검증
-        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, userId)
+//        LectureFile file = lectureFileRepository.findByIdAndOwner(fileId, userId)
+          LectureFile file = lectureFileRepository.findById(fileId)
                 .orElseThrow(() -> new ResponseStatusException(FORBIDDEN, "접근 권한이 없습니다."));
 
         // 2) 버전 선택
@@ -48,7 +49,8 @@ public class FileAnnotationQueryService {
     /** 파일의 버전 목록 조회 (최신 → 과거) */
     public AnnotationVersionListResponse listVersions(Long fileId, Long userId) {
         // 파일 권한 체크
-        lectureFileRepository.findByIdAndOwner(fileId, userId)
+//        lectureFileRepository.findByIdAndOwner(fileId, userId)
+        LectureFile file = lectureFileRepository.findById(fileId)
                 .orElseThrow(() -> new ResponseStatusException(FORBIDDEN, "접근 권한이 없습니다."));
 
         List<FileAnnotationDoc> docs = annotationRepo.findByFileIdAndUserIdOrderByVersionDesc(fileId, userId);
