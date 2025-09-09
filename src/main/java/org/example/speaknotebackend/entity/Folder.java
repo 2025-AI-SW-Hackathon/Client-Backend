@@ -7,6 +7,7 @@ import lombok.*;
 @Entity
 @Table(name = "folder")
 @Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder

@@ -1,8 +1,11 @@
 package org.example.speaknotebackend.domain.folder;
 
 import lombok.RequiredArgsConstructor;
+import org.example.speaknotebackend.common.exceptions.BaseException;
+import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
 import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
+import org.example.speaknotebackend.domain.folder.model.UpdateFolderNameRequest;
 import org.example.speaknotebackend.domain.repository.FolderRepository;
 import org.example.speaknotebackend.domain.user.UserService;
 import org.example.speaknotebackend.entity.Folder;
@@ -41,5 +44,17 @@ public class FolderService {
                         .name(folder.getName())
                         .build())
                 .toList();
+    }
+
+    @Transactional
+    public void updateFolder(Long userId, Long folderId, String folderName) {
+        Folder folder = folderRepository.findByUserIdAndId(userId, folderId)
+                .orElseThrow(() -> new BaseException(BaseResponseStatus.FOLDER_NOT_FOUND));
+
+        if (folderName.equals(folder.getName())) {
+            return;
+        }
+
+        folder.setName(folderName); // TODO : 중복 폴더명 방지 로직 추가
     }
 }

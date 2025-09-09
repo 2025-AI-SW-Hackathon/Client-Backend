@@ -8,6 +8,7 @@ import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
 import org.example.speaknotebackend.config.UserDetailsImpl;
 import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
+import org.example.speaknotebackend.domain.folder.model.UpdateFolderNameRequest;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,5 +52,20 @@ public class FolderController {
 
         List<GetFolderListResponse> result = folderService.getFolderList(user.getUserId());
         return new BaseResponse<>(result);
+    }
+
+    @Operation(summary = "폴더명 수정")
+    @PatchMapping("/{folderId}")
+    public BaseResponse<Void> updateFolder(
+            @PathVariable Long folderId,
+            @Valid @RequestBody UpdateFolderNameRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user
+    ) {
+        if (user == null) {
+            throw new BaseException(BaseResponseStatus.INVALID_USER_JWT);
+        }
+
+        folderService.updateFolder(user.getUserId(), folderId, request.getName());
+        return new BaseResponse<>(SUCCESS);
     }
 }
