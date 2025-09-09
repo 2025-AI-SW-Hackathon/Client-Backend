@@ -26,4 +26,5 @@ public class LectureFile extends BaseEntity {
 
     @Column(length = 512, nullable = false)
     private String fileUrl;
+
 }

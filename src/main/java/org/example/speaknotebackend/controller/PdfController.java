@@ -32,7 +32,6 @@ public class PdfController {
                                                                  @AuthenticationPrincipal UserDetailsImpl userDetails) {
         // 인증 사용자면 userId, 아니면 null(게스트)
         final Long userId = (userDetails != null) ? userDetails.getUserId() : null;
-
         // 파일 저장(로그인 사용자는 LectureFile 생성됨)
         final Long fileId = pdfService.saveTempPDF(file, userId);
 

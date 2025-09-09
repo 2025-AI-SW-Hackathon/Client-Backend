@@ -7,5 +7,7 @@ public interface SocialUser {
 
     String getName();
 
+    Long getFolderId();
+
     SocialInfoRes toSocialInfoRes(SocialTermsAgreementResponse termsAgreements);
 }
