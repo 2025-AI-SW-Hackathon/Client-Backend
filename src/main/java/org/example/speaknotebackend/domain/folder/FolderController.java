@@ -68,4 +68,21 @@ public class FolderController {
         folderService.updateFolder(user.getUserId(), folderId, request.getName());
         return new BaseResponse<>(SUCCESS);
     }
+
+    @Operation(
+            summary = "폴더 삭제",
+            description = "폴더 안에 있는 강의 노트까지 삭제합니다."
+    )
+    @DeleteMapping("{folderId}")
+    public BaseResponse<Void> deleteFolder(
+            @PathVariable Long folderId,
+            @AuthenticationPrincipal UserDetailsImpl user
+    ) {
+        if (user == null) {
+            throw new BaseException(BaseResponseStatus.INVALID_USER_JWT);
+        }
+
+        folderService.deleteFolder(user.getUserId(), folderId);
+        return new BaseResponse<>(SUCCESS);
+    }
 }

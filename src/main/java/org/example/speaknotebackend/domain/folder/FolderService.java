@@ -5,9 +5,9 @@ import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
 import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
-import org.example.speaknotebackend.domain.folder.model.UpdateFolderNameRequest;
 import org.example.speaknotebackend.domain.repository.FolderRepository;
 import org.example.speaknotebackend.domain.user.UserService;
+import org.example.speaknotebackend.entity.BaseEntity;
 import org.example.speaknotebackend.entity.Folder;
 import org.example.speaknotebackend.entity.User;
 import org.springframework.stereotype.Service;
@@ -36,7 +36,7 @@ public class FolderService {
     }
 
     public List<GetFolderListResponse> getFolderList(Long userId) {
-        List<Folder> folders = folderRepository.findByUserId(userId);
+        List<Folder> folders = folderRepository.findByUserIdAndStatus(userId, BaseEntity.Status.ACTIVE);
 
         return folders.stream()
                 .map(folder -> GetFolderListResponse.builder()
@@ -48,7 +48,7 @@ public class FolderService {
 
     @Transactional
     public void updateFolder(Long userId, Long folderId, String folderName) {
-        Folder folder = folderRepository.findByUserIdAndId(userId, folderId)
+        Folder folder = folderRepository.findByUserIdAndIdAndStatus(userId, folderId, BaseEntity.Status.ACTIVE)
                 .orElseThrow(() -> new BaseException(BaseResponseStatus.FOLDER_NOT_FOUND));
 
         if (folderName.equals(folder.getName())) {
@@ -56,5 +56,15 @@ public class FolderService {
         }
 
         folder.setName(folderName); // TODO : 중복 폴더명 방지 로직 추가
+    }
+
+    @Transactional
+    public void deleteFolder(Long userId, Long folderId) {
+        Folder folder = folderRepository.findByUserIdAndIdAndStatus(userId, folderId, BaseEntity.Status.ACTIVE)
+                .orElseThrow(() -> new BaseException(BaseResponseStatus.FOLDER_NOT_FOUND));
+
+        // TODO : 연관된 note 삭제 로직 추가
+
+        folder.delete(); // soft delete
     }
 }
