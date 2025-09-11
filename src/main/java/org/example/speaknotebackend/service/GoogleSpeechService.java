@@ -103,7 +103,7 @@ public class GoogleSpeechService {
                         payload.put("pageNumber", result.get("pageNumber"));
 //                        payload.put("refinedMarkdown", result.get("refinedMarkdown"));
                         String refinedText = String.valueOf(result.get("refinedText")).trim();
-
+                        System.out.println(result.get("refinedText"));
 // 조건 1: 시작이 "에러"로 시작
                         boolean startsWithError = refinedText.startsWith("에러");
 
