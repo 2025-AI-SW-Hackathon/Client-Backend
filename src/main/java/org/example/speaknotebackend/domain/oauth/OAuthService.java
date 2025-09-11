@@ -52,14 +52,6 @@ public class OAuthService {
                     socialUser.getSocialId(),
                     socialType
             );
-
-            log.info("새로운 소셜 로그인 사용자에 대한 강의 폴더 생성");
-            Folder folder = Folder.builder()
-                    .user(user)
-                    .folderName("")
-                    .basic(true)
-                    .build();
-            folderRepository.save(folder);
         }
 
         try {
