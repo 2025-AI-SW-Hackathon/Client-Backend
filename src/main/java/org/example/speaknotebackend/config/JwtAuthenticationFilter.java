@@ -4,8 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.example.speaknotebackend.domain.repository.FolderRepository;
-import org.example.speaknotebackend.entity.Folder;
+
 import org.example.speaknotebackend.global.JwtService;
 import org.example.speaknotebackend.domain.user.UserService;
 import org.example.speaknotebackend.entity.User;

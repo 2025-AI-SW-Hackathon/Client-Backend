@@ -33,6 +33,7 @@ public enum BaseResponseStatus {
      * Folder
      */
     FOLDER_NOT_FOUND(false, HttpStatus.NOT_FOUND.value(), "폴더를 찾을 수 없습니다."),
+    LECTURE_NOT_FOUND(false, HttpStatus.NOT_FOUND.value(), "강의를 찾을 수 없습니다."),
 
     /**
      * Auth
