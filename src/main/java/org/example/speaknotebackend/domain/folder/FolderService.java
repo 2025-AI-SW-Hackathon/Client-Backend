@@ -1,14 +1,19 @@
 package org.example.speaknotebackend.domain.folder;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
 import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
 import org.example.speaknotebackend.domain.repository.FolderRepository;
+import org.example.speaknotebackend.domain.repository.LectureHistoryCustom;
+import org.example.speaknotebackend.domain.repository.LectureHistoryCustomImpl;
+import org.example.speaknotebackend.domain.repository.LectureRepository;
 import org.example.speaknotebackend.domain.user.UserService;
 import org.example.speaknotebackend.entity.BaseEntity;
 import org.example.speaknotebackend.entity.Folder;
+import org.example.speaknotebackend.entity.Lecture;
 import org.example.speaknotebackend.entity.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,4 +72,16 @@ public class FolderService {
 
         folder.delete(); // soft delete
     }
+
+    @Transactional
+    public void moveFolder(Long userId,Long lectureId, Long newFolderId) {
+        Folder folder = folderRepository.findById(newFolderId)
+                .orElseThrow(()-> new BaseException(BaseResponseStatus.FOLDER_NOT_FOUND ));
+        Lecture lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(()-> new BaseException(BaseResponseStatus.LECTURE_NOT_FOUND ));
+        lecture.setFolder(folder);
+
+    }
+
+    private final LectureRepository lectureRepository;
 }

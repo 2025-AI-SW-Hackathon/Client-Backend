@@ -19,4 +19,5 @@ public interface LectureFileRepository extends JpaRepository<LectureFile, Long> 
                                            @Param("userId") Long userId);
 
     Optional<LectureFile> findById(Long fileId);
+
 }

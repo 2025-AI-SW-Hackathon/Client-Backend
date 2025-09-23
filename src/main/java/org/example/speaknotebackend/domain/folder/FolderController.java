@@ -1,6 +1,8 @@
 package org.example.speaknotebackend.domain.folder;
 
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponse;
@@ -64,10 +66,32 @@ public class FolderController {
         if (user == null) {
             throw new BaseException(BaseResponseStatus.INVALID_USER_JWT);
         }
-
+        System.out.println("폴더명 변경:");
+        System.out.println(request.getName());
         folderService.updateFolder(user.getUserId(), folderId, request.getName());
         return new BaseResponse<>(SUCCESS);
     }
+
+
+    @Operation(summary = "폴더 이동")
+    @PatchMapping("/{lectureId}/move")
+    public BaseResponse<Void> moveFolder(
+            @Valid @RequestBody MoveFolderRequest request,
+            @PathVariable Long lectureId,
+            @AuthenticationPrincipal UserDetailsImpl user
+    ) {
+        if (user == null) {
+            throw new BaseException(BaseResponseStatus.INVALID_USER_JWT);
+        }
+        System.out.println("폴더 이동:");
+        folderService.moveFolder(user.getUserId(),lectureId, request.id);
+        return new BaseResponse<>(SUCCESS);
+    }
+
+    // Request DTO
+    public record MoveFolderRequest(
+            @NotNull Long id
+    ) {}
 
     @Operation(
             summary = "폴더 삭제",

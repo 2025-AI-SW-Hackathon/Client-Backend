@@ -50,6 +50,7 @@ public class UserService {
         folderRepository.save(Folder.builder()
                 .user(saved)
                 .name("기본")
+                .basic(true)
                 .build());
 
         return saved;
