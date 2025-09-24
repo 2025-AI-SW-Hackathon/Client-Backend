@@ -7,8 +7,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class SttTextBuffer {
 
-    /** 현재 세션에서 AI 전송을 위해 누적 중인 순수 델타 텍스트 */
-    private final StringBuilder context = new StringBuilder();
+    /** 최적의 파라미터 : 마지막 6개 델타를 유지하는 유한 버퍼 (drop_oldest) */
+    private final java.util.ArrayDeque<String> deltaBuffer = new java.util.ArrayDeque<>(6);
 
     /** 마지막으로 처리한 STT 텍스트 전체(raw) */
     private String lastFullText = "";
@@ -52,7 +52,11 @@ public class SttTextBuffer {
         // 5) 공통 부분 뒤에 남은 실제 델타
         String delta = raw.substring(cutIndex).trim();
         if (!delta.isEmpty()) {
-            context.append(delta);
+            // 유한 버퍼 용량 6 유지. 초과 시 가장 오래된 항목 제거 (drop_oldest)
+            if (deltaBuffer.size() >= 6) {
+                deltaBuffer.pollFirst();
+            }
+            deltaBuffer.offerLast(delta);
         }
 
         // 6) 다음 비교를 위해 전체 raw 텍스트 갱신
@@ -64,12 +68,16 @@ public class SttTextBuffer {
      * 세션 버퍼만 초기화합니다. lastFullText는 유지해 다음 비교 기준으로 사용합니다.
      */
     public synchronized String getAccumulatedContextAndClear() {
-        if (context.length() == 0) {
+        if (deltaBuffer.isEmpty()) {
             return null;
         }
-        String result = context.toString();
-        context.setLength(0);
-        return result;
+        StringBuilder aggregated = new StringBuilder();
+        for (String d : deltaBuffer) {
+            if (aggregated.length() > 0) aggregated.append(' ');
+            aggregated.append(d);
+        }
+        deltaBuffer.clear();
+        return aggregated.toString();
     }
 
     /** 연속된 두 normalized 문자열의 공통 접두사 길이를 반환 */
@@ -89,7 +97,7 @@ public class SttTextBuffer {
 
     /** (필요 시) 세션 전체 초기화 */
     public synchronized void clearAll() {
-        context.setLength(0);
+        deltaBuffer.clear();
         lastFullText = "";
 
     }
