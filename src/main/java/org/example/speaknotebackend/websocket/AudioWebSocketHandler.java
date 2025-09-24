@@ -25,7 +25,11 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         Long fileId = resolveFileId(session);
-        session.getAttributes().put("fileId", fileId);
+        if (fileId == null) {
+            log.warn("fileId 누락 또는 유효하지 않음. STT만 진행: {}", session.getId());
+        } else {
+            session.getAttributes().put("fileId", fileId);
+        }
 
         log.info("클라이언트 WebSocket 연결됨: {}, fileId={}", session.getId(), fileId);
 
