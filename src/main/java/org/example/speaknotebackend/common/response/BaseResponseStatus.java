@@ -90,6 +90,12 @@ public enum BaseResponseStatus {
     USER_NOT_CERTIFICATED(false, HttpStatus.BAD_REQUEST.value(), "본인인증이 필요합니다."),
 
     /**
+     * WebSocket / Callback
+     * */
+    WS_CONTEXT_NOT_FOUND(false, NOT_FOUND.value(), "세션 컨텍스트를 찾을 수 없습니다."),
+    WS_SESSION_NOT_FOUND(false, NOT_FOUND.value(), "WebSocket 세션을 찾을 수 없습니다."),
+
+    /**
      * Term
      */
     TERM_NOT_FOUND(false, HttpStatus.NOT_FOUND.value(), "약관 정보를 찾을 수 없습니다."),
