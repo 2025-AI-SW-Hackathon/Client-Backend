@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.util.SttTextBuffer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -61,8 +62,10 @@ public class GoogleSpeechService {
     // (옵션) 텍스트 후처리/정제를 위한 서비스 – 현재 STT 테스트 단계에서는 비활성화 상태
     private final TextRefineService textRefineService;
     // 큐 용량 (백프레셔)
-    private static final int INBOUND_QUEUE_CAPACITY = 6;
-    private static final int OUTBOUND_QUEUE_CAPACITY = 6;
+    @Value("${stt.queue.inbound.capacity:6}")
+    private int INBOUND_QUEUE_CAPACITY;
+    @Value("${stt.queue.outbound.capacity:6}")
+    private int OUTBOUND_QUEUE_CAPACITY;
 
     private void enqueueDropOldest(Deque<byte[]> q, byte[] item, int capacity) {
         while (q.size() >= capacity) {
