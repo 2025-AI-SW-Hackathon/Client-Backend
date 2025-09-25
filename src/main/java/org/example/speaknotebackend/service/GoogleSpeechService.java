@@ -25,6 +25,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.springframework.scheduling.annotation.Async;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -237,11 +239,22 @@ public class GoogleSpeechService {
      */
     private boolean sendInitialRequest(ClientStream<StreamingRecognizeRequest> requestStream) {
         try {
+            // STT 인식 바이어싱을 위한 컨텍스트(도메인 키워드)
+            SpeechContext sttContext = SpeechContext.newBuilder()
+                    .addPhrases("스레드")
+                    .addPhrases("구글")
+                    .addPhrases("STT")
+                    .addPhrases("웹소켓")
+                    .addPhrases("웹 소켓")
+                    .setBoost(20.0f) // 키워드 가중치(필요 시 조정)
+                    .build();
+
             RecognitionConfig recognitionConfig = RecognitionConfig.newBuilder()
                     .setEncoding(RecognitionConfig.AudioEncoding.LINEAR16)
                     .setSampleRateHertz(16000)
                     .setLanguageCode("ko-KR") // 기본 언어 : 한국어
                     .setEnableAutomaticPunctuation(true) // 자동 문장부호 활성화
+                    .addSpeechContexts(sttContext)
                     .build();
 
             StreamingRecognitionConfig streamingConfig = StreamingRecognitionConfig.newBuilder()
@@ -278,8 +291,22 @@ public class GoogleSpeechService {
         }
 
         try {
+            // 웹소켓 수신 스레드는 enqueue만 수행
             enqueueDropOldest(context.inboundQueue, audioBytes, INBOUND_QUEUE_CAPACITY);
             // 가능한 만큼 즉시 전송 (간단 동기 flush)
+            drainInboundAsync(context);
+        } catch (Exception e) {
+            log.warn("오디오 chunk 전송 실패", e);
+        }
+    }
+
+    /**
+     * 세션의 Inbound 큐에 쌓인 오디오 청크를 하나씩 꺼내서 Google STT gRPC 스트림에 전송한다.
+     * 스레드 풀에서 비동기로 처리한다.
+     */
+    @Async("sttTaskExecutor")
+    protected CompletableFuture<Void> drainInboundAsync(SessionContext context) {
+        try {
             byte[] chunk;
             while ((chunk = context.inboundQueue.pollFirst()) != null) {
                 StreamingRecognizeRequest audioRequest = StreamingRecognizeRequest.newBuilder()
@@ -288,10 +315,14 @@ public class GoogleSpeechService {
                 context.requestStream.send(audioRequest);
             }
         } catch (Exception e) {
-            log.warn("오디오 chunk 전송 실패", e);
+            log.warn("Inbound drain 실패", e);
         }
+        return CompletableFuture.completedFuture(null);
     }
 
+    /**
+     * 세션의 Outbound 큐에 쌓인 메시지를 하나씩 꺼내서 클라이언트로 전송한다.
+     */
     private void flushOutbound(WebSocketSession session, SessionContext context) {
         try {
             if (!session.isOpen()) {
