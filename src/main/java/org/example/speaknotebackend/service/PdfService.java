@@ -3,7 +3,6 @@ package org.example.speaknotebackend.service;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
-import org.example.speaknotebackend.config.UserDetailsImpl;
 import org.example.speaknotebackend.domain.repository.FolderRepository;
 import org.example.speaknotebackend.domain.repository.LectureFileRepository;
 import org.example.speaknotebackend.domain.repository.LectureRepository;
@@ -26,9 +25,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +41,8 @@ public class PdfService {
     private final UserService userService;
     private final UserRepository userRepository;
     private final LectureFileRepository lectureFileRepository;
+    private final LectureRepository lectureRepository;
+    private final FolderRepository folderRepository;
 
     @Transactional
     public Long saveTempPDF(MultipartFile file, Long userId) {
@@ -72,8 +72,8 @@ public class PdfService {
                     LectureFile saved = lectureFileRepository.save(lectureFile);
                     Lecture lecture = Lecture.builder()
                             .lectureFile(saved)
-                            .summary("test용")
-                            .tags("ai,데이터베이스,ML")
+                            .summary("")
+                            .tags("")
                             .folder(folder)
                             .lectureName(storedFileName)
                             .language("ko")
@@ -158,6 +158,32 @@ public class PdfService {
         return outputStream.toByteArray();
     }
 
-    private final LectureRepository lectureRepository;
-    private final FolderRepository folderRepository;
+    /**
+     * FastAPI 응답에서 받은 요약/키워드를 Lecture에 반영한다.
+     */
+    @Transactional
+    public void updateLectureMetaFromPythonResponse(Long fileId, String summary, List<String> keywords) {
+        if (fileId == null) return;
+
+        Lecture lecture = lectureRepository.findByLectureFile_Id(fileId);
+        if (lecture == null) return;
+
+        // summary가 유효하게 들어온 경우에만 업데이트 (255자 제한)
+        if (summary != null && !summary.isBlank()) {
+            String trimmed = summary.trim();
+            if (trimmed.length() > 255) trimmed = trimmed.substring(0, 255);
+            lecture.setSummary(trimmed);
+        }
+
+        // keywords가 존재할 때만 tags 업데이트 (255자 제한)
+        if (keywords != null && !keywords.isEmpty()) {
+            String tagsJoined = String.join(",", keywords).trim();
+            if (!tagsJoined.isBlank()) {
+                if (tagsJoined.length() > 255) tagsJoined = tagsJoined.substring(0, 255);
+                lecture.setTags(tagsJoined);
+            }
+        }
+
+        lectureRepository.save(lecture);
+    }
 }
