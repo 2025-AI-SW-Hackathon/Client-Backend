@@ -24,7 +24,7 @@ public class Lecture extends BaseEntity {
     @Column(name = "summary", length = 255, nullable = false)
     private String summary;
 
-    @Column(name = "tags", length = 255, nullable = false) // 식별자 : , (콤마) => 태그 최대 3개까지 저장 가능함
+    @Column(name = "tags", length = 255, nullable = false) // 식별자 : , (콤마) => 최소 5개 저장
     private String tags;
 
     @Column(length = 10, nullable = false)
