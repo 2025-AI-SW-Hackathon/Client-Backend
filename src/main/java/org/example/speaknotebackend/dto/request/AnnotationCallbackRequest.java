@@ -34,5 +34,11 @@ public class AnnotationCallbackRequest {
 
         @Schema(description = "요청 ID - 중복 요청 방지 (멱등키)")
         private String requestId;
+
+        @Schema(description = "주석이 속한 페이지 번호")
+        private Integer page;
+
+        @Schema(description = "주석의 상태 코드 (1,2)")
+        private Integer answerState;
     }
 }
