@@ -31,6 +31,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 import org.springframework.scheduling.annotation.Async;
 import java.util.concurrent.CompletableFuture;
 
@@ -58,6 +60,8 @@ public class GoogleSpeechService {
         final AtomicBoolean initialConfigSent = new AtomicBoolean(false);
         // 세션 내 전송 순서 보장을 위한 단조 증가 시퀀스
         final AtomicLong seq = new AtomicLong(0L);
+        // 콜백 결과의 순서 보장을 위한 마지막 전송 완료 seq
+        final AtomicLong lastDeliveredSeq = new AtomicLong(0L);
         // Google STT로 오디오 청크를 전송하는 gRPC 요청 스트림 핸들
         volatile ClientStream<StreamingRecognizeRequest> requestStream;
         // 2초 지연 후 1초 주기로 버퍼를 비우고 후속 처리를 수행하는 작업 핸들
@@ -68,6 +72,9 @@ public class GoogleSpeechService {
         final Deque<byte[]> inboundQueue = new ConcurrentLinkedDeque<>();
         // 세션별 Outbound(클라이언트로 보낼 메시지) 큐 - drop_oldest (구조화 페이로드)
         final Deque<Map<String,Object>> outboundQueue = new ConcurrentLinkedDeque<>();
+        // 최근 처리한 requestId 집합(중복 제거용) - 간단한 LRU 유사 정책으로 제한 관리
+        final Deque<String> recentRequestOrder = new ConcurrentLinkedDeque<>();
+        final Set<String> recentRequestIds = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
     }
 
     // 세션 ID별로 SessionContext를 보관하는 맵 (동시성 안전)
@@ -381,6 +388,20 @@ public class GoogleSpeechService {
                 throw new BaseException(WS_CONTEXT_NOT_FOUND, "세션 컨텍스트 없음: " + result.getSessionId());
             }
 
+            // 멱등 처리: requestId 중복이면 무시
+            if (isDuplicateRequest(context, result.getRequestId())) {
+                log.info("[CALLBACK] 중복 requestId는 무시: {}", result.getRequestId());
+                return;
+            }
+
+            // 순서 보장: 과거 seq 응답은 무시
+            long lastSeq = context.lastDeliveredSeq.get();
+            Long currSeq = result.getSeq();
+            if (currSeq != null && currSeq < lastSeq) {
+                log.info("[CALLBACK] 과거 seq는 무시: curr={} < last={}", currSeq, lastSeq);
+                return;
+            }
+
             Map<String,Object> payload = new HashMap<>();
             payload.put("userId", result.getUserId());
             payload.put("sessionId", result.getSessionId());
@@ -396,6 +417,11 @@ public class GoogleSpeechService {
             WebSocketSession session = context.webSocketSession;
             if (session != null) {
                 flushOutbound(session, context);
+                // 전송 성공으로 간주하고 마지막 seq 갱신 및 requestId 기록
+                if (currSeq != null && currSeq >= lastSeq) {
+                    context.lastDeliveredSeq.set(currSeq);
+                }
+                rememberRequestId(context, result.getRequestId());
             } else {
                 throw new BaseException(WS_SESSION_NOT_FOUND, "WebSocket 세션 없음: " + result.getSessionId());
             }
@@ -404,6 +430,24 @@ public class GoogleSpeechService {
                 throw be;
             }
             throw new BaseException(UNEXPECTED_ERROR, e.getMessage());
+        }
+    }
+
+    private boolean isDuplicateRequest(SessionContext context, String requestId) {
+        if (requestId == null) return false;
+        return context.recentRequestIds.contains(requestId);
+    }
+
+    private void rememberRequestId(SessionContext context, String requestId) {
+        if (requestId == null) return;
+        // 용량 제한 200
+        final int LIMIT = 200;
+        if (context.recentRequestIds.add(requestId)) {
+            context.recentRequestOrder.offerLast(requestId);
+            while (context.recentRequestOrder.size() > LIMIT) {
+                String old = context.recentRequestOrder.pollFirst();
+                if (old != null) context.recentRequestIds.remove(old);
+            }
         }
     }
 
