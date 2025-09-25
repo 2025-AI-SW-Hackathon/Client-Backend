@@ -10,10 +10,14 @@ import com.google.protobuf.ByteString;
 
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.util.SttTextBuffer;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.FileInputStream;
+import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -43,6 +47,10 @@ public class GoogleSpeechService {
         volatile ClientStream<StreamingRecognizeRequest> requestStream;
         // 2초 지연 후 1초 주기로 버퍼를 비우고 후속 처리를 수행하는 작업 핸들
         volatile ScheduledFuture<?> scheduledTask;
+        // 세션별 Inbound(오디오 바이트) 큐 - drop_oldest
+        final Deque<byte[]> inboundQueue = new ConcurrentLinkedDeque<>();
+        // 세션별 Outbound(클라이언트로 보낼 메시지) 큐 - drop_oldest
+        final Deque<String> outboundQueue = new ConcurrentLinkedDeque<>();
     }
 
     // 세션 ID별로 SessionContext를 보관하는 맵 (동시성 안전)
@@ -52,6 +60,26 @@ public class GoogleSpeechService {
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     // (옵션) 텍스트 후처리/정제를 위한 서비스 – 현재 STT 테스트 단계에서는 비활성화 상태
     private final TextRefineService textRefineService;
+    // 큐 용량 (백프레셔)
+    private static final int INBOUND_QUEUE_CAPACITY = 6;
+    private static final int OUTBOUND_QUEUE_CAPACITY = 6;
+
+    private void enqueueDropOldest(Deque<byte[]> q, byte[] item, int capacity) {
+        while (q.size() >= capacity) {
+            q.pollFirst();
+            log.debug("[QUEUE DROP] Inbound drop_oldest triggered (capacity={}), newItemSizeBytes={}", capacity, item == null ? -1 : item.length);
+        }
+        q.offerLast(item);
+    }
+
+    private void enqueueDropOldest(Deque<String> q, String item, int capacity) {
+        while (q.size() >= capacity) {
+            q.pollFirst();
+            log.debug("[QUEUE DROP] Outbound drop_oldest triggered (capacity={}), newItemLength={}", capacity, item == null ? -1 : item.length());
+        }
+        q.offerLast(item);
+    }
+
 
     /**
      * 애플리케이션 시작 시 Google STT 클라이언트를 초기화한다.
@@ -142,6 +170,8 @@ public class GoogleSpeechService {
                         log.error("AI 정제 및 전송 중 오류", e);
                     }
                     */
+                    enqueueDropOldest(context.outboundQueue, aggregatedText, OUTBOUND_QUEUE_CAPACITY);
+                    flushOutbound(session, context);
                     return;
                 }
             }, 2000, 1000, TimeUnit.MILLISECONDS); // 최적의 파라미터 (2초 후 최초 실행, 이후 1초마다 반복)
@@ -237,19 +267,45 @@ public class GoogleSpeechService {
     public void sendAudioChunk(WebSocketSession session, byte[] audioBytes, Long fileId) {
         String sessionId = session.getId();
         SessionContext context = sessionContexts.get(sessionId);
-        if (context == null || !context.streamingStarted.get() || context.requestStream == null) return;
-        if (!context.initialConfigSent.get()) {
-            log.debug("초기 설정 전송 전 오디오 수신 - 무시");
+        if (context == null || !context.streamingStarted.get() || context.requestStream == null || !context.initialConfigSent.get()) {
+            if (context != null && !context.initialConfigSent.get()) {
+                log.debug("초기 설정 전송 전 오디오 수신 - 무시");
+            }
             return;
         }
 
         try {
-            StreamingRecognizeRequest audioRequest = StreamingRecognizeRequest.newBuilder()
-                    .setAudioContent(ByteString.copyFrom(audioBytes))
-                    .build();
-            context.requestStream.send(audioRequest);
+            enqueueDropOldest(context.inboundQueue, audioBytes, INBOUND_QUEUE_CAPACITY);
+            // 가능한 만큼 즉시 전송 (간단 동기 flush)
+            byte[] chunk;
+            while ((chunk = context.inboundQueue.pollFirst()) != null) {
+                StreamingRecognizeRequest audioRequest = StreamingRecognizeRequest.newBuilder()
+                        .setAudioContent(ByteString.copyFrom(chunk))
+                        .build();
+                context.requestStream.send(audioRequest);
+            }
         } catch (Exception e) {
             log.warn("오디오 chunk 전송 실패", e);
+        }
+    }
+
+    private void flushOutbound(WebSocketSession session, SessionContext context) {
+        try {
+            if (!session.isOpen()) {
+                context.outboundQueue.clear();
+                return;
+            }
+            String msg;
+            ObjectMapper mapper = new ObjectMapper();
+            while ((msg = context.outboundQueue.pollFirst()) != null) {
+                String json = mapper.writeValueAsString(java.util.Map.of(
+                        "refinedText", msg
+                ));
+                log.info("[WS OUTBOUND] session={} payload={}", session.getId(), json);
+                session.sendMessage(new TextMessage(json));
+            }
+        } catch (Exception e) {
+            log.warn("Outbound 전송 실패", e);
         }
     }
 
