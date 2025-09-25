@@ -48,6 +48,8 @@ public class GoogleSpeechService {
     // Google STT 클라이언트 객체 (gRPC 커넥션/호출의 엔트리 포인트)
     private SpeechClient speechClient;
 
+    private final LectureRepository lectureRepository;
+
     /**
      * 세션별 상태 컨텍스트
      * - WebSocket 세션 ID를 키로, STT 스트림/버퍼/스케줄 등의 상태를 분리 관리
@@ -154,7 +156,7 @@ public class GoogleSpeechService {
 
             // 1초 스텝으로 트리거를 평가(최종 문장 버퍼 기반)
             context.scheduledTask = scheduler.scheduleAtFixedRate(() -> {
-                // 내용 충분성 조건: 누적 문장 수가 최소 5문장 이상
+                // 누적 문장 수가 최소 5문장 이상
                 int count = context.textBuffer.getSentenceCount();
                 if (count >= 5) {
                     String snapshot = context.textBuffer.getSnapshotAndClear();
@@ -194,8 +196,6 @@ public class GoogleSpeechService {
                         // 관측용 WS 송출
                         enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
                         flushOutbound(session, context);
-
-                        log.info("[TRIGGER] 5문장 기준 충족. snapshot 전송 준비: session={} seq={} length={}", sessionId, seq, snapshot.length());
                     }
                 }
             }, 1000, 1000, TimeUnit.MILLISECONDS);
@@ -269,7 +269,7 @@ public class GoogleSpeechService {
                 
                 addTagsToSpeechContext(scBuilder, tagsString);
             } catch (Exception ignored) {}
-            // 키워드가 하나도 없으면 기본값 몇 개만 보조적으로 유지(안정성)
+            // 키워드가 하나도 없으면 기본값 몇 개만 보조적으로 유지
             SpeechContext sttContext = scBuilder
                     .addPhrases("STT")
                     .build();
@@ -472,6 +472,4 @@ public class GoogleSpeechService {
             log.warn("STT 종료 중 오류", e);
         }
     }
-
-    private final LectureRepository lectureRepository;
 }
