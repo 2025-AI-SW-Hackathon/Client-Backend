@@ -11,6 +11,8 @@ import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.util.SttTextBuffer;
+import org.example.speaknotebackend.domain.repository.LectureRepository;
+import org.example.speaknotebackend.entity.Lecture;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
@@ -74,6 +76,8 @@ public class GoogleSpeechService {
         // 최근 처리한 requestId 집합(중복 제거용) - 간단한 LRU 유사 정책으로 제한 관리
         final Deque<String> recentRequestOrder = new ConcurrentLinkedDeque<>();
         final Set<String> recentRequestIds = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
+        // 연관 파일 ID (STT 키워드 주입용)
+        Long fileId;
     }
 
     // 세션 ID별로 SessionContext를 보관하는 맵 (동시성 안전)
@@ -113,8 +117,9 @@ public class GoogleSpeechService {
     /**
      * 애플리케이션 시작 시 Google STT 클라이언트를 초기화한다.
      */
-    public GoogleSpeechService() throws Exception {
+    public GoogleSpeechService(LectureRepository lectureRepository) throws Exception {
         log.info("[GoogleSpeechService] 생성자 진입");
+        this.lectureRepository = lectureRepository;
         try {
             GoogleCredentials credentials = GoogleCredentials.fromStream(
                     new FileInputStream("src/main/resources/stt-credentials.json")
@@ -135,7 +140,7 @@ public class GoogleSpeechService {
     /**
      * Google STT 스트리밍을 시작한다.
      */
-    public void startStreaming(WebSocketSession session,Long fileId) {
+    public void startStreaming(WebSocketSession session, Long fileId) {
         try {
             final String sessionId = session.getId();
             final SessionContext context = sessionContexts.computeIfAbsent(sessionId, k -> new SessionContext());
@@ -143,6 +148,7 @@ public class GoogleSpeechService {
                 log.warn("이미 스케줄러가 실행 중입니다. session={}", sessionId);
             }
             context.webSocketSession = session;
+            context.fileId = fileId;
             context.streamingStarted.set(true);
             context.initialConfigSent.set(false);
 
@@ -234,7 +240,7 @@ public class GoogleSpeechService {
                             context.requestStream = stream;
 
                             // 초기 환경설정 요청 전송
-                            if (sendInitialRequest(context.requestStream)) {
+                            if (sendInitialRequest(context.requestStream, context.fileId)) {
                                 context.initialConfigSent.set(true);
                             }
                             context.streamingStarted.set(true);
@@ -252,16 +258,20 @@ public class GoogleSpeechService {
      * 초기 STT 환경설정 요청을 Google에 전송한다.
      * - 샘플레이트, 인코딩, 언어 등
      */
-    private boolean sendInitialRequest(ClientStream<StreamingRecognizeRequest> requestStream) {
+    private boolean sendInitialRequest(ClientStream<StreamingRecognizeRequest> requestStream, Long fileId) {
         try {
-            // STT 인식 바이어싱을 위한 컨텍스트(도메인 키워드)
-            SpeechContext sttContext = SpeechContext.newBuilder()
-                    .addPhrases("스레드")
-                    .addPhrases("구글")
+            SpeechContext.Builder scBuilder = SpeechContext.newBuilder().setBoost(20.0f);
+            // Lecture.tags 기반 키워드 주입
+            try {
+                Lecture lecture = (fileId == null) ? null : lectureRepository.findByLectureFile_Id(fileId);
+                String tagsString = null;
+                if (lecture != null) tagsString = lecture.getTags();
+                
+                addTagsToSpeechContext(scBuilder, tagsString);
+            } catch (Exception ignored) {}
+            // 키워드가 하나도 없으면 기본값 몇 개만 보조적으로 유지(안정성)
+            SpeechContext sttContext = scBuilder
                     .addPhrases("STT")
-                    .addPhrases("웹소켓")
-                    .addPhrases("웹 소켓")
-                    .setBoost(20.0f) // 키워드 가중치(필요 시 조정)
                     .build();
 
             RecognitionConfig recognitionConfig = RecognitionConfig.newBuilder()
@@ -289,6 +299,16 @@ public class GoogleSpeechService {
         } catch (Exception e) {
             log.error("STT 초기 요청 전송 실패", e);
             return false;
+        }
+    }
+
+    private void addTagsToSpeechContext(SpeechContext.Builder builder, String tags) {
+        if (tags == null) return;
+        String[] arr = tags.split(",");
+        for (String raw : arr) {
+            if (raw == null) continue;
+            String kw = raw.trim();
+            if (!kw.isEmpty()) builder.addPhrases(kw);
         }
     }
 
@@ -452,4 +472,6 @@ public class GoogleSpeechService {
             log.warn("STT 종료 중 오류", e);
         }
     }
+
+    private final LectureRepository lectureRepository;
 }
