@@ -10,13 +10,13 @@ import com.google.protobuf.ByteString;
 
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.common.exceptions.BaseException;
-import org.example.speaknotebackend.controller.CallbackController;
 import org.example.speaknotebackend.util.SttTextBuffer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.FileInputStream;
 import java.util.Deque;
@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -52,7 +51,7 @@ public class GoogleSpeechService {
      * - WebSocket 세션 ID를 키로, STT 스트림/버퍼/스케줄 등의 상태를 분리 관리
      */
     private static class SessionContext {
-        // 세션별 STT 델타 누적 버퍼 (유한 버퍼, drop_oldest)
+        // 세션별 STT 문장 누적 버퍼
         final SttTextBuffer textBuffer = new SttTextBuffer();
         // gRPC 스트리밍이 시작/유지되고 있는지 여부 (멀티스레드 안전)
         final AtomicBoolean streamingStarted = new AtomicBoolean(false); // AtomicBoolean : 동시성 안전한 불리언
@@ -82,8 +81,10 @@ public class GoogleSpeechService {
 
     // 주기 작업 실행용 공용 스케줄러 (캡처/처리 2스레드 운용)
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
-    // (옵션) 텍스트 후처리/정제를 위한 서비스 – 현재 STT 테스트 단계에서는 비활성화 상태
-    private final TextRefineService textRefineService;
+
+    @Autowired(required = false)
+    private org.example.speaknotebackend.client.PythonAnnotationClient pythonClient;
+
     // 큐 용량 (백프레셔)
     @Value("${stt.queue.inbound.capacity:6}")
     private int INBOUND_QUEUE_CAPACITY;
@@ -112,8 +113,7 @@ public class GoogleSpeechService {
     /**
      * 애플리케이션 시작 시 Google STT 클라이언트를 초기화한다.
      */
-    public GoogleSpeechService(TextRefineService textRefineService) throws Exception {
-        this.textRefineService = textRefineService;
+    public GoogleSpeechService() throws Exception {
         log.info("[GoogleSpeechService] 생성자 진입");
         try {
             GoogleCredentials credentials = GoogleCredentials.fromStream(
@@ -146,77 +146,53 @@ public class GoogleSpeechService {
             context.streamingStarted.set(true);
             context.initialConfigSent.set(false);
 
-            // 2초 윈도우(버퍼는 SttTextBuffer가 유지), 1초 스텝으로 주기적 전송
+            // 1초 스텝으로 트리거를 평가(최종 문장 버퍼 기반)
             context.scheduledTask = scheduler.scheduleAtFixedRate(() -> {
-                String aggregatedText = context.textBuffer.getAccumulatedContextAndClear();
-                log.warn("[AI 전송 비활성화] 누적 context (session={}): {}", sessionId, aggregatedText);
-                if (aggregatedText != null && !aggregatedText.isBlank()) {
-                    // Google STT만 테스트하기 위해 AI 서버 전송 로직을 임시 비활성화합니다.
-                    // 필요 시 아래 원본 로직을 복구하기
-                    /*
-                    try {
-                        Map<String,Object> result = textRefineService.refine(aggregatedText,fileId,session.getId());
-                        log.info("AI 서버 정제 결과: {}", result);
+                // 내용 충분성 조건: 누적 문장 수가 최소 5문장 이상
+                int count = context.textBuffer.getSentenceCount();
+                if (count >= 5) {
+                    String snapshot = context.textBuffer.getSnapshotAndClear();
+                    if (snapshot != null && !snapshot.isBlank()) {
+                        long seq = context.seq.incrementAndGet();
+                        String requestId = UUID.randomUUID().toString();
 
-                        Map<String, Object> payload = new HashMap<>();
-                        payload.put("refinedText", result.get("refinedText"));
-                        payload.put("voice",result.get("voice"));
-                        payload.put("answerState", result.get("answerState"));
-                        payload.put("pageNumber", result.get("pageNumber"));
+                        // 다음 단계에서 Python /text 호출에 사용될 메타 포함
+                        Map<String,Object> payload = new HashMap<>();
+                        payload.put("sessionId", sessionId);
+                        payload.put("seq", seq);
+                        payload.put("requestId", requestId);
+                        payload.put("timestamp", System.currentTimeMillis());
+                        payload.put("text", snapshot);
 
-                        String refinedText = String.valueOf(result.get("refinedText")).trim();
-                        System.out.println(result.get("refinedText"));
-                        // 조건 1: 시작이 "에러"로 시작
-                        boolean startsWithError = refinedText.startsWith("에러");
+                        // Python /text 호출
+                        Long userId = null;
+                        try {
+                            Object u = session.getAttributes().get("userId");
+                            if (u instanceof Long) userId = (Long) u;
+                        } catch (Exception ignored) {}
 
-                        // 조건 2: 전체 내용에 "에러" 단어가 3번 이상 포함
-                        long errorCount = refinedText.chars()
-                                .mapToObj(c -> (char) c)
-                                .collect(StringBuilder::new, StringBuilder::append, StringBuilder::append)
-                                .toString()
-                                .split("에러", -1).length - 1; // "에러" 등장 횟수
-
-                        boolean tooManyErrors = errorCount >= 3;
-
-                        // 조건 3: 전체 길이가 너무 짧은 경우
-                        boolean tooShort = refinedText.length() < 15;
-
-                        if (startsWithError || tooManyErrors || tooShort) {
-                            log.info("전송 생략 - 이유: 시작 '에러'={}, 에러빈도={}, 길이={}", startsWithError, errorCount, refinedText.length());
-                            return;
-                        }
-
-                        ObjectMapper mapper = new ObjectMapper();
-                        String json = mapper.writeValueAsString(payload);
-                        if (session.isOpen()) {
-                            session.sendMessage(new TextMessage(json));
+                        if (pythonClient != null) {
+                            pythonClient.postTextFireAndForget(
+                                    userId,
+                                    sessionId,
+                                    seq,
+                                    snapshot,
+                                    "ko-KR",
+                                    requestId
+                            );
+                            payload.put("status", "queued");
                         } else {
-                            log.warn("WebSocket 세션이 이미 닫혔습니다.");
+                            payload.put("status", "skipped");
                         }
 
-                        log.info("정제된 결과 WebSocket 전송 완료");
-                    } catch (Exception e) {
-                        log.error("AI 정제 및 전송 중 오류", e);
+                        // 관측용 WS 송출
+                        enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
+                        flushOutbound(session, context);
+
+                        log.info("[TRIGGER] 5문장 기준 충족. snapshot 전송 준비: session={} seq={} length={}", sessionId, seq, snapshot.length());
                     }
-                    */
-                    
-                    // 멱등/순서 메타데이터를 포함한 페이로드 구성 후 큐잉
-                    // TODO 나중에 삭제 해야 함
-                    long seq = context.seq.incrementAndGet();
-                    String requestId = UUID.randomUUID().toString();
-                    Map<String,Object> payload = new HashMap<>();
-                    payload.put("sessionId", sessionId);
-                    payload.put("seq", seq);
-                    payload.put("requestId", requestId);
-                    payload.put("timestamp", System.currentTimeMillis());
-                    payload.put("refinedText", aggregatedText);
-
-                    enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
-
-                    flushOutbound(session, context);
-                    return;
                 }
-            }, 2000, 1000, TimeUnit.MILLISECONDS); // 최적의 파라미터 (2초 후 최초 실행, 이후 1초마다 반복)
+            }, 1000, 1000, TimeUnit.MILLISECONDS);
 
             // 양방향 스트리밍을 위한 BidiStreamObserver 구현
             speechClient.streamingRecognizeCallable().call(
@@ -235,7 +211,9 @@ public class GoogleSpeechService {
                                     String transcript = result.getAlternatives(0).getTranscript();
                                     boolean isFinal = result.getIsFinal();
                                     log.info("[STT] {}: {}", isFinal ? "final" : "interim", transcript);
-                                    if (isFinal) context.textBuffer.append(transcript);
+                                    if (isFinal) {
+                                        context.textBuffer.appendTranscript(transcript);
+                                    }
                                 }
                             }
                         }
@@ -463,7 +441,7 @@ public class GoogleSpeechService {
                     context.requestStream.closeSend();
                 }
                 context.streamingStarted.set(false);
-                context.textBuffer.clearAll();
+                    context.textBuffer.clearAll();
                 if (context.scheduledTask != null && !context.scheduledTask.isCancelled()) {
                     context.scheduledTask.cancel(true);
                 }

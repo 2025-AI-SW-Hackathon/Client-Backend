@@ -3,102 +3,75 @@ package org.example.speaknotebackend.util;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @Slf4j
 @Component
 public class SttTextBuffer {
 
-    /** 최적의 파라미터 : 마지막 6개 델타를 유지하는 유한 버퍼 (drop_oldest) */
-    private final java.util.ArrayDeque<String> deltaBuffer = new java.util.ArrayDeque<>(6);
+    /** 세션별 최종 STT 문장 누적 버퍼 */
+    private final List<String> sentences = new ArrayList<>();
 
-    /** 마지막으로 처리한 STT 텍스트 전체(raw) */
-    private String lastFullText = "";
+    /** 한국어/영문 구두점 기준 문장 분리 패턴 (구두점 포함 유지) */
+    private static final Pattern SENTENCE_PATTERN = Pattern.compile(
+            "[^.!?。！？]+[\n\r\s]*[.!?。！？]?"
+    );
 
-    /**
-     * Google STT가 넘겨주는 텍스트(부분 또는 전체)를 받아,
-     * 공백을 무시하고 계산한 공통 접두사 길이만큼 raw newText에서 잘라낸 뒤
-     * 나머지 델타만 context에 누적합니다.
-     */
-    public synchronized void append(String newText) {
-        if (newText == null || newText.isBlank()) {
+    /** 최종 STT 텍스트를 문장 단위로 누적 */
+    public synchronized void appendTranscript(String text) {
+        if (text == null || text.isBlank()) {
             return;
         }
-
-        String raw = newText;
-        String prev = lastFullText == null ? "" : lastFullText;
-
-        // 1) 공백 제거한 normalized 버전
-        String normRaw = raw.replaceAll("\\s+", "");
-        String normPrev = prev.replaceAll("\\s+", "");
-
-        // 2) 길이가 줄어들거나 같으면(부분 수정·재전송) 무시
-        if (normRaw.length() <= normPrev.length()) {
-            return;
-        }
-
-        // 3) 공백 무시한 상태에서 공통 접두사 길이 계산
-        int commonLen = commonPrefixLength(normPrev, normRaw);
-
-        // 4) raw 문자열에서 공백을 제외하고 commonLen글자가 지나간 지점을 찾아 인덱스 계산
-        int count = 0, cutIndex = 0;
-        for (int i = 0; i < raw.length(); i++) {
-            if (!Character.isWhitespace(raw.charAt(i))) {
-                count++;
-                if (count == commonLen) {
-                    cutIndex = i + 1;
-                    break;
-                }
+        for (String s : extractSentences(text)) {
+            String trimmed = s.trim();
+            if (!trimmed.isEmpty()) {
+                sentences.add(trimmed);
             }
         }
-        // 5) 공통 부분 뒤에 남은 실제 델타
-        String delta = raw.substring(cutIndex).trim();
-        if (!delta.isEmpty()) {
-            // 유한 버퍼 용량 6 유지. 초과 시 가장 오래된 항목 제거 (drop_oldest)
-            if (deltaBuffer.size() >= 6) {
-                deltaBuffer.pollFirst();
-            }
-            deltaBuffer.offerLast(delta);
-        }
-
-        // 6) 다음 비교를 위해 전체 raw 텍스트 갱신
-        lastFullText = raw;
     }
 
-    /**
-     * (예: 5초 주기) AI로 보낼 누적 context를 반환하고,
-     * 세션 버퍼만 초기화합니다. lastFullText는 유지해 다음 비교 기준으로 사용합니다.
-     */
-    public synchronized String getAccumulatedContextAndClear() {
-        if (deltaBuffer.isEmpty()) {
-            return null;
-        }
-        StringBuilder aggregated = new StringBuilder();
-        for (String d : deltaBuffer) {
-            if (aggregated.length() > 0) aggregated.append(' ');
-            aggregated.append(d);
-        }
-        deltaBuffer.clear();
-        return aggregated.toString();
+    /** 누적 문장 수 */
+    public synchronized int getSentenceCount() {
+        return sentences.size();
     }
 
-    /** 연속된 두 normalized 문자열의 공통 접두사 길이를 반환 */
-    private int commonPrefixLength(String a, String b) {
-        int i = 0, j = 0, matched = 0;
-        while (i < a.length() && j < b.length()) {
-            char ca = a.charAt(i), cb = b.charAt(j);
-            if (ca != cb) {
-                break;
-            }
-            matched++;
-            i++;
-            j++;
-        }
-        return matched;
+    /** 현재까지 누적된 텍스트를 공백으로 결합해 반환 (clear 없음) */
+    public synchronized String getAllText() {
+        if (sentences.isEmpty()) return "";
+        return String.join(" ", sentences);
     }
 
-    /** (필요 시) 세션 전체 초기화 */
+    /** 스냅샷 텍스트를 반환하고 버퍼를 비운다 */
+    public synchronized String getSnapshotAndClear() {
+        if (sentences.isEmpty()) return null;
+        String joined = String.join(" ", sentences).trim();
+        sentences.clear();
+        return joined.isEmpty() ? null : joined;
+    }
+
+    /** 전체 초기화 */
     public synchronized void clearAll() {
-        deltaBuffer.clear();
-        lastFullText = "";
+        sentences.clear();
+    }
 
+    /** 내부: 문장 추출 도우미 */
+    private List<String> extractSentences(String text) {
+        List<String> result = new ArrayList<>();
+        Matcher m = SENTENCE_PATTERN.matcher(text);
+        while (m.find()) {
+            String sentence = m.group();
+            if (sentence != null && !sentence.isBlank()) {
+                result.add(sentence);
+            }
+        }
+        if (result.isEmpty()) {
+            result.add(text);
+        }
+        return result;
     }
 }
+
+
