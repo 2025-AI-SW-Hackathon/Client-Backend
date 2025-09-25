@@ -9,6 +9,8 @@ import com.google.cloud.speech.v1.*;
 import com.google.protobuf.ByteString;
 
 import lombok.extern.slf4j.Slf4j;
+import org.example.speaknotebackend.common.exceptions.BaseException;
+import org.example.speaknotebackend.controller.CallbackController;
 import org.example.speaknotebackend.util.SttTextBuffer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.scheduling.annotation.Async;
 import java.util.concurrent.CompletableFuture;
+
+import static org.example.speaknotebackend.common.response.BaseResponseStatus.UNEXPECTED_ERROR;
+import static org.example.speaknotebackend.common.response.BaseResponseStatus.WS_CONTEXT_NOT_FOUND;
+import static org.example.speaknotebackend.common.response.BaseResponseStatus.WS_SESSION_NOT_FOUND;
 
 @Slf4j
 @Service
@@ -56,6 +62,8 @@ public class GoogleSpeechService {
         volatile ClientStream<StreamingRecognizeRequest> requestStream;
         // 2초 지연 후 1초 주기로 버퍼를 비우고 후속 처리를 수행하는 작업 핸들
         volatile ScheduledFuture<?> scheduledTask;
+        // WebSocket 세션 (콜백에서 사용)
+        volatile WebSocketSession webSocketSession;
         // 세션별 Inbound(오디오 바이트) 큐 - drop_oldest
         final Deque<byte[]> inboundQueue = new ConcurrentLinkedDeque<>();
         // 세션별 Outbound(클라이언트로 보낼 메시지) 큐 - drop_oldest (구조화 페이로드)
@@ -127,6 +135,7 @@ public class GoogleSpeechService {
             if (context.scheduledTask != null && !context.scheduledTask.isDone()) {
                 log.warn("이미 스케줄러가 실행 중입니다. session={}", sessionId);
             }
+            context.webSocketSession = session;
             context.streamingStarted.set(true);
             context.initialConfigSent.set(false);
 
@@ -185,6 +194,7 @@ public class GoogleSpeechService {
                     */
                     
                     // 멱등/순서 메타데이터를 포함한 페이로드 구성 후 큐잉
+                    // TODO 나중에 삭제 해야 함
                     long seq = context.seq.incrementAndGet();
                     String requestId = UUID.randomUUID().toString();
                     Map<String,Object> payload = new HashMap<>();
@@ -193,7 +203,9 @@ public class GoogleSpeechService {
                     payload.put("requestId", requestId);
                     payload.put("timestamp", System.currentTimeMillis());
                     payload.put("refinedText", aggregatedText);
+
                     enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
+
                     flushOutbound(session, context);
                     return;
                 }
@@ -360,6 +372,42 @@ public class GoogleSpeechService {
     }
 
     /**
+     * Python 콜백 결과를 세션별 Outbound 큐에 적재하고 즉시 전송한다.
+     */
+    public void enqueueOutboundFromCallback(org.example.speaknotebackend.dto.request.AnnotationCallbackRequest.AnnotationResult result) {
+        try {
+            SessionContext context = sessionContexts.get(result.getSessionId());
+            if (context == null) {
+                throw new BaseException(WS_CONTEXT_NOT_FOUND, "세션 컨텍스트 없음: " + result.getSessionId());
+            }
+
+            Map<String,Object> payload = new HashMap<>();
+            payload.put("userId", result.getUserId());
+            payload.put("sessionId", result.getSessionId());
+            payload.put("jobId", result.getJobId());
+            payload.put("seq", result.getSeq());
+            payload.put("audioText", result.getAudioText());
+            payload.put("annotation", result.getAnnotation());
+            payload.put("requestId", result.getRequestId());
+            payload.put("timestamp", System.currentTimeMillis());
+
+            enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
+
+            WebSocketSession session = context.webSocketSession;
+            if (session != null) {
+                flushOutbound(session, context);
+            } else {
+                throw new BaseException(WS_SESSION_NOT_FOUND, "WebSocket 세션 없음: " + result.getSessionId());
+            }
+        } catch (Exception e) {
+            if (e instanceof BaseException be) {
+                throw be;
+            }
+            throw new BaseException(UNEXPECTED_ERROR, e.getMessage());
+        }
+    }
+
+    /**
      * 스트리밍 세션을 종료하고 리소스를 해제한다.
      */
     public void stopStreaming(WebSocketSession session) {
@@ -375,6 +423,7 @@ public class GoogleSpeechService {
                 if (context.scheduledTask != null && !context.scheduledTask.isCancelled()) {
                     context.scheduledTask.cancel(true);
                 }
+                context.webSocketSession = null;
                 log.info("STT 스트리밍 종료 (session={})", sessionId);
             }
         } catch (Exception e) {
