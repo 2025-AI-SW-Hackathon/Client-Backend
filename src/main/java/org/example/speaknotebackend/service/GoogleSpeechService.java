@@ -18,6 +18,9 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.io.FileInputStream;
 import java.util.Deque;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -25,6 +28,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.scheduling.annotation.Async;
 import java.util.concurrent.CompletableFuture;
 
@@ -46,14 +50,16 @@ public class GoogleSpeechService {
         final AtomicBoolean streamingStarted = new AtomicBoolean(false); // AtomicBoolean : 동시성 안전한 불리언
         // 초기 설정 패킷(StreamingRecognitionConfig) 전송 완료 여부
         final AtomicBoolean initialConfigSent = new AtomicBoolean(false);
+        // 세션 내 전송 순서 보장을 위한 단조 증가 시퀀스
+        final AtomicLong seq = new AtomicLong(0L);
         // Google STT로 오디오 청크를 전송하는 gRPC 요청 스트림 핸들
         volatile ClientStream<StreamingRecognizeRequest> requestStream;
         // 2초 지연 후 1초 주기로 버퍼를 비우고 후속 처리를 수행하는 작업 핸들
         volatile ScheduledFuture<?> scheduledTask;
         // 세션별 Inbound(오디오 바이트) 큐 - drop_oldest
         final Deque<byte[]> inboundQueue = new ConcurrentLinkedDeque<>();
-        // 세션별 Outbound(클라이언트로 보낼 메시지) 큐 - drop_oldest
-        final Deque<String> outboundQueue = new ConcurrentLinkedDeque<>();
+        // 세션별 Outbound(클라이언트로 보낼 메시지) 큐 - drop_oldest (구조화 페이로드)
+        final Deque<Map<String,Object>> outboundQueue = new ConcurrentLinkedDeque<>();
     }
 
     // 세션 ID별로 SessionContext를 보관하는 맵 (동시성 안전)
@@ -69,6 +75,7 @@ public class GoogleSpeechService {
     @Value("${stt.queue.outbound.capacity:6}")
     private int OUTBOUND_QUEUE_CAPACITY;
 
+    // 웹소켓 -> Inbound 큐
     private void enqueueDropOldest(Deque<byte[]> q, byte[] item, int capacity) {
         while (q.size() >= capacity) {
             q.pollFirst();
@@ -77,10 +84,11 @@ public class GoogleSpeechService {
         q.offerLast(item);
     }
 
-    private void enqueueDropOldest(Deque<String> q, String item, int capacity) {
+    // Python -> Outbound 큐
+    private void enqueueDropOldest(Deque<Map<String,Object>> q, Map<String,Object> item, int capacity) {
         while (q.size() >= capacity) {
             q.pollFirst();
-            log.debug("[QUEUE DROP] Outbound drop_oldest triggered (capacity={}), newItemLength={}", capacity, item == null ? -1 : item.length());
+            log.debug("[QUEUE DROP] Outbound drop_oldest triggered (capacity={}), newItemKeys={}", capacity, item == null ? -1 : item.size());
         }
         q.offerLast(item);
     }
@@ -175,7 +183,17 @@ public class GoogleSpeechService {
                         log.error("AI 정제 및 전송 중 오류", e);
                     }
                     */
-                    enqueueDropOldest(context.outboundQueue, aggregatedText, OUTBOUND_QUEUE_CAPACITY);
+                    
+                    // 멱등/순서 메타데이터를 포함한 페이로드 구성 후 큐잉
+                    long seq = context.seq.incrementAndGet();
+                    String requestId = UUID.randomUUID().toString();
+                    Map<String,Object> payload = new HashMap<>();
+                    payload.put("sessionId", sessionId);
+                    payload.put("seq", seq);
+                    payload.put("requestId", requestId);
+                    payload.put("timestamp", System.currentTimeMillis());
+                    payload.put("refinedText", aggregatedText);
+                    enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
                     flushOutbound(session, context);
                     return;
                 }
@@ -329,13 +347,11 @@ public class GoogleSpeechService {
                 context.outboundQueue.clear();
                 return;
             }
-            String msg;
+            java.util.Map<String,Object> msg;
             ObjectMapper mapper = new ObjectMapper();
             while ((msg = context.outboundQueue.pollFirst()) != null) {
-                String json = mapper.writeValueAsString(java.util.Map.of(
-                        "refinedText", msg
-                ));
-                log.info("[WS OUTBOUND] session={} payload={}", session.getId(), json);
+                String json = mapper.writeValueAsString(msg);
+                log.info("[WS OUTBOUND] session={} payload=\n{}", session.getId(), json);
                 session.sendMessage(new TextMessage(json));
             }
         } catch (Exception e) {
