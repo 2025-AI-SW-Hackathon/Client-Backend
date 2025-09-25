@@ -377,27 +377,6 @@ public class GoogleSpeechService {
     }
 
     /**
-     * 동일한 fileId를 사용하는 모든 세션으로 간단한 페이로드를 브로드캐스트한다.
-     */
-    public void broadcastToFileSessions(Long fileId, java.util.Map<String,Object> payload) {
-        if (fileId == null || payload == null) return;
-        try {
-            for (SessionContext ctx : sessionContexts.values()) {
-                if (ctx == null) continue;
-                if (ctx.fileId == null) continue;
-                if (!fileId.equals(ctx.fileId)) continue;
-                enqueueDropOldest(ctx.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
-                WebSocketSession session = ctx.webSocketSession;
-                if (session != null) {
-                    flushOutbound(session, ctx);
-                }
-            }
-        } catch (Exception e) {
-            log.warn("broadcastToFileSessions 실패 fileId={}", fileId, e);
-        }
-    }
-
-    /**
      * Python 콜백 결과를 세션별 Outbound 큐에 적재하고 즉시 전송한다.
      */
     public void enqueueOutboundFromCallback(org.example.speaknotebackend.dto.request.AnnotationCallbackRequest.AnnotationResult result) {
@@ -423,12 +402,9 @@ public class GoogleSpeechService {
 
             Map<String,Object> payload = new HashMap<>();
             payload.put("userId", result.getUserId());
-            payload.put("sessionId", result.getSessionId());
-            payload.put("jobId", result.getJobId());
             payload.put("seq", result.getSeq());
             payload.put("audioText", result.getAudioText());
             payload.put("annotation", result.getAnnotation());
-            payload.put("requestId", result.getRequestId());
             payload.put("page", result.getPage());
             payload.put("answerState", result.getAnswerState());
             payload.put("timestamp", System.currentTimeMillis());
