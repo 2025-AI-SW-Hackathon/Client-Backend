@@ -105,9 +105,9 @@ public class PdfService {
     }
 
     /**
-     * FastAPI로 파일 + userId + fileId를 multipart/form-data로 전송
+     * FastAPI로 파일 + userId + fileId + sessionId를 multipart/form-data로 전송
      */
-    public String sendPdfFileToFastAPI(MultipartFile file, Long userId, Long fileId) {
+    public String sendPdfFileToFastAPI(MultipartFile file, Long userId, Long fileId, String sessionId) {
         try {
             String boundary = "----SpringToFastAPI" + System.currentTimeMillis();
             HttpClient client = HttpClient.newHttpClient();
@@ -115,6 +115,7 @@ public class PdfService {
             // part: 일반 폼 필드 생성기
             byte[] userIdPart = buildFormField(boundary, "userId", userId == null ? "" : String.valueOf(userId));
             byte[] fileIdPart = buildFormField(boundary, "fileId", fileId == null ? "" : String.valueOf(fileId));
+            byte[] sessionIdPart = buildFormField(boundary, "sessionId", sessionId == null ? "" : String.valueOf(fileId));
 
             // part: 파일
             String fileName = file.getOriginalFilename() == null ? "uploaded.pdf" : file.getOriginalFilename();
@@ -134,6 +135,7 @@ public class PdfService {
             byte[] requestBody = concatenate(
                     userIdPart,
                     fileIdPart,
+                    sessionIdPart,
                     fileHeader, fileBytes, fileTail,
                     endBoundary
             );
