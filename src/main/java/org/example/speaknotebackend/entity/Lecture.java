@@ -34,7 +34,7 @@ public class Lecture extends BaseEntity {
     @Column(nullable = false)
     private LocalDateTime startedAt;
 
-    @Column(name="lecture_name",length =20,nullable = false)
+    @Column(name="lecture_name",length =255,nullable = false)
     private String lectureName; // 생각해보니 파일에 들어가서 이름 수정하는 거 에바인 거 같아서 저장된 이름을 수정한느게 아니라 보이는 용도의 이름을 설정해야될듯.
 
     @UpdateTimestamp

@@ -61,15 +61,21 @@ public class PdfService {
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
             if (userId != null) {
+                System.out.println("🔍 [PdfService] userId가 존재함: " + userId);
                 User user = userRepository.findById(userId).orElse(null);
                 if (user != null) {
+                    System.out.println("🔍 [PdfService] 사용자 찾음: " + user.getEmail());
                     Folder folder = folderRepository.findFirstByUserIdAndBasic(user.getId(),true);
+                    System.out.println("🔍 [PdfService] 폴더 찾음: " + (folder != null ? folder.getName() : "null"));
+                    
                     LectureFile lectureFile = LectureFile.builder()
                             .uuid(uuid)
                             .fileName(storedFileName)
                             .fileUrl(realfilePath.toString()) // 필요 시 공개 URL/Signed URL로 대체
                             .build();
                     LectureFile saved = lectureFileRepository.save(lectureFile);
+                    System.out.println("✅ [PdfService] LectureFile 저장됨: " + saved.getId());
+                    
                     Lecture lecture = Lecture.builder()
                             .lectureFile(saved)
                             .summary("")
@@ -80,10 +86,15 @@ public class PdfService {
                             .user(user)
                             .build();
                     Lecture lecture1 = lectureRepository.save(lecture);
+                    System.out.println("✅ [PdfService] Lecture 저장됨: " + lecture1.getId());
                     System.out.println(lecture1);
                     System.out.println(lecture1.getEndedAt());
                     return saved.getId();
+                } else {
+                    System.out.println("❌ [PdfService] 사용자를 찾을 수 없음: " + userId);
                 }
+            } else {
+                System.out.println("❌ [PdfService] userId가 null - 비로그인 사용자");
             }
             // 비로그인/유저없음인 경우엔 null 리턴(컨트롤러에서 처리)
             return null;
