@@ -34,8 +34,13 @@ public class PdfController {
                                                                  @AuthenticationPrincipal UserDetailsImpl userDetails) {
         // 인증 사용자면 userId, 아니면 null(게스트)
         final Long userId = (userDetails != null) ? userDetails.getUserId() : null;
+        System.out.println("🔍 [PdfController] userDetails: " + (userDetails != null ? "존재" : "null"));
+        System.out.println("🔍 [PdfController] userId: " + userId);
+        System.out.println("🔍 [PdfController] 파일명: " + file.getOriginalFilename());
+        
         // 파일 저장(로그인 사용자는 LectureFile 생성됨)
         final Long fileId = pdfService.saveTempPDF(file, userId);
+        System.out.println("🔍 [PdfController] fileId: " + fileId);
 
         // ⬇️ FastAPI로 파일 + userId + fileId 함께 전송
         final String fastApiResponse = pdfService.sendPdfFileToFastAPI(file, userId, fileId);
