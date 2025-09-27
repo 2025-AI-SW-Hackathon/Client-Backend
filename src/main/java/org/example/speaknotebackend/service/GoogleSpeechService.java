@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import javax.annotation.PostConstruct;
 
 import java.io.FileInputStream;
 import java.util.Deque;
@@ -49,6 +50,9 @@ public class GoogleSpeechService {
     private SpeechClient speechClient;
 
     private final LectureRepository lectureRepository;
+    
+    @Value("${google.stt.credentials.path}")
+    private String credentialsPath;
 
     /**
      * 세션별 상태 컨텍스트
@@ -117,14 +121,21 @@ public class GoogleSpeechService {
 
 
     /**
+     * 생성자
+     */
+    public GoogleSpeechService(LectureRepository lectureRepository) {
+        this.lectureRepository = lectureRepository;
+    }
+
+    /**
      * 애플리케이션 시작 시 Google STT 클라이언트를 초기화한다.
      */
-    public GoogleSpeechService(LectureRepository lectureRepository) throws Exception {
-        log.info("[GoogleSpeechService] 생성자 진입");
-        this.lectureRepository = lectureRepository;
+    @PostConstruct
+    public void initSpeechClient() {
+        log.info("[GoogleSpeechService] STT 클라이언트 초기화 시작 - credentialsPath={}", credentialsPath);
         try {
             GoogleCredentials credentials = GoogleCredentials.fromStream(
-                    new FileInputStream("src/main/resources/stt-credentials.json")
+                    new FileInputStream(credentialsPath)
             );
 
             // 인증 정보를 포함한 STT 클라이언트 설정
@@ -132,10 +143,10 @@ public class GoogleSpeechService {
                     .setCredentialsProvider(() -> credentials)
                     .build();
             speechClient = SpeechClient.create(settings);
-            log.info("Google SpeechClient 초기화 완료");
+            log.info("✅ Google SpeechClient 초기화 완료");
 
         } catch (Exception e) {
-            log.error("Google STT 초기화 실패", e);
+            log.error("❌ Google STT 초기화 실패", e);
         }
     }
 
@@ -143,6 +154,13 @@ public class GoogleSpeechService {
      * Google STT 스트리밍을 시작한다.
      */
     public void startStreaming(WebSocketSession session, Long fileId) {
+        startStreaming(session, fileId, null);
+    }
+
+    /**
+     * Google STT 스트리밍을 시작한다. (userId 포함)
+     */
+    public void startStreaming(WebSocketSession session, Long fileId, Long userId) {
         try {
             final String sessionId = session.getId();
             final SessionContext context = sessionContexts.computeIfAbsent(sessionId, k -> new SessionContext());
@@ -153,16 +171,28 @@ public class GoogleSpeechService {
             context.fileId = fileId;
             context.streamingStarted.set(true);
             context.initialConfigSent.set(false);
+            
+            // userId를 세션에 저장
+            if (userId != null) {
+                session.getAttributes().put("userId", userId);
+                log.info("🔍 [STT] userId 세션에 저장: {}", userId);
+            }
 
             // 1초 스텝으로 트리거를 평가(최종 문장 버퍼 기반)
             context.scheduledTask = scheduler.scheduleAtFixedRate(() -> {
                 // 누적 문장 수가 최소 5문장 이상
                 int count = context.textBuffer.getSentenceCount();
+                log.info("🔍 [STT Buffer] 세션={}, 누적 문장 수={}/5", sessionId, count);
+                
                 if (count >= 5) {
-                    String snapshot = context.textBuffer.getSnapshotAndClear();
+                    String snapshot = context.textBuffer.getSnapshotAndClearIfEnough();
                     if (snapshot != null && !snapshot.isBlank()) {
                         long seq = context.seq.incrementAndGet();
                         String requestId = UUID.randomUUID().toString();
+
+                        log.info("📤 [Python 전송] 세션={}, seq={}, requestId={}, 텍스트 길이={}", 
+                                sessionId, seq, requestId, snapshot.length());
+                        log.info("📤 [Python 전송] 텍스트 내용: {}", snapshot);
 
                         // 다음 단계에서 Python /text 호출에 사용될 메타 포함
                         Map<String,Object> payload = new HashMap<>();
@@ -173,30 +203,37 @@ public class GoogleSpeechService {
                         payload.put("text", snapshot);
 
                         // Python /text 호출
-                        Long userId = null;
-                        try {
-                            Object u = session.getAttributes().get("userId");
-                            if (u instanceof Long) userId = (Long) u;
-                        } catch (Exception ignored) {}
-
                         if (pythonClient != null) {
-                            pythonClient.postTextFireAndForget(
-                                    userId,
-                                    sessionId,
-                                    seq,
-                                    snapshot,
-                                    "ko-KR",
-                                    requestId
-                            );
-                            payload.put("status", "queued");
+                            log.info("🚀 [Python 호출] postTextFireAndForget 시작 - userId={}, sessionId={}, seq={}", 
+                                    userId, sessionId, seq);
+                            try {
+                                pythonClient.postTextFireAndForget(
+                                        userId,
+                                        sessionId,
+                                        seq,
+                                        snapshot,
+                                        "ko-KR",
+                                        requestId
+                                );
+                                payload.put("status", "queued");
+                                log.info("✅ [Python 호출] postTextFireAndForget 완료 - requestId={}", requestId);
+                            } catch (Exception e) {
+                                log.error("❌ [Python 호출] postTextFireAndForget 실패: ", e);
+                                payload.put("status", "error");
+                            }
                         } else {
                             payload.put("status", "skipped");
+                            log.warn("⚠️ [Python 호출] pythonClient가 null - 호출 건너뜀");
                         }
 
                         // 관측용 WS 송출
                         enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
                         flushOutbound(session, context);
+                    } else {
+                        log.warn("⚠️ [STT Buffer] snapshot이 null이거나 비어있음");
                     }
+                } else {
+                    log.debug("⏳ [STT Buffer] 문장 수 부족 - {}/5", count);
                 }
             }, 1000, 1000, TimeUnit.MILLISECONDS);
 
@@ -218,7 +255,11 @@ public class GoogleSpeechService {
                                     boolean isFinal = result.getIsFinal();
                                     log.info("[STT] {}: {}", isFinal ? "final" : "interim", transcript);
                                     if (isFinal) {
+                                        int beforeCount = context.textBuffer.getSentenceCount();
                                         context.textBuffer.appendTranscript(transcript);
+                                        int afterCount = context.textBuffer.getSentenceCount();
+                                        log.info("📝 [STT Buffer] 문장 추가 - 세션={}, 이전={}, 이후={}, 추가된 텍스트='{}'", 
+                                                sessionId, beforeCount, afterCount, transcript);
                                     }
                                 }
                             }
@@ -361,18 +402,26 @@ public class GoogleSpeechService {
     private void flushOutbound(WebSocketSession session, SessionContext context) {
         try {
             if (!session.isOpen()) {
+                log.warn("⚠️ [CALLBACK] WebSocket 세션이 닫혀있음 - sessionId={}", session.getId());
                 context.outboundQueue.clear();
                 return;
             }
+            
+            log.info("📤 [CALLBACK] flushOutbound 시작 - sessionId={}, 큐 크기={}", session.getId(), context.outboundQueue.size());
+            
             java.util.Map<String,Object> msg;
             ObjectMapper mapper = new ObjectMapper();
+            int sentCount = 0;
             while ((msg = context.outboundQueue.pollFirst()) != null) {
                 String json = mapper.writeValueAsString(msg);
-                log.info("[WS OUTBOUND] session={} payload=\n{}", session.getId(), json);
+                log.info("📤 [CALLBACK] WebSocket 메시지 전송 - sessionId={}, payload={}", session.getId(), json);
                 session.sendMessage(new TextMessage(json));
+                sentCount++;
             }
+            
+            log.info("✅ [CALLBACK] flushOutbound 완료 - sessionId={}, 전송된 메시지 수={}", session.getId(), sentCount);
         } catch (Exception e) {
-            log.warn("Outbound 전송 실패", e);
+            log.error("❌ [CALLBACK] Outbound 전송 실패 - sessionId={}, error: ", session.getId(), e);
         }
     }
 
@@ -380,15 +429,27 @@ public class GoogleSpeechService {
      * Python 콜백 결과를 세션별 Outbound 큐에 적재하고 즉시 전송한다.
      */
     public void enqueueOutboundFromCallback(org.example.speaknotebackend.dto.request.AnnotationCallbackRequest.AnnotationResult result) {
+        log.info("🔄 [CALLBACK] enqueueOutboundFromCallback 시작 - sessionId={}, seq={}, requestId={}", 
+                result.getSessionId(), result.getSeq(), result.getRequestId());
+        
         try {
+            // 입력값 검증
+            if (result.getSessionId() == null || result.getSessionId().isEmpty()) {
+                log.error("❌ [CALLBACK] sessionId가 null 또는 빈 문자열");
+                throw new IllegalArgumentException("sessionId가 null 또는 빈 문자열입니다");
+            }
+            
             SessionContext context = sessionContexts.get(result.getSessionId());
             if (context == null) {
+                log.error("❌ [CALLBACK] 세션 컨텍스트 없음 - sessionId={}", result.getSessionId());
+                log.error("❌ [CALLBACK] 현재 활성 세션들: {}", sessionContexts.keySet());
                 throw new BaseException(WS_CONTEXT_NOT_FOUND, "세션 컨텍스트 없음: " + result.getSessionId());
             }
+            log.info("✅ [CALLBACK] 세션 컨텍스트 찾음 - sessionId={}", result.getSessionId());
 
             // 멱등 처리: requestId 중복이면 무시
             if (isDuplicateRequest(context, result.getRequestId())) {
-                log.info("[CALLBACK] 중복 requestId는 무시: {}", result.getRequestId());
+                log.info("⚠️ [CALLBACK] 중복 requestId는 무시: {}", result.getRequestId());
                 return;
             }
 
@@ -396,7 +457,7 @@ public class GoogleSpeechService {
             long lastSeq = context.lastDeliveredSeq.get();
             Long currSeq = result.getSeq();
             if (currSeq != null && currSeq < lastSeq) {
-                log.info("[CALLBACK] 과거 seq는 무시: curr={} < last={}", currSeq, lastSeq);
+                log.info("⚠️ [CALLBACK] 과거 seq는 무시: curr={} < last={}", currSeq, lastSeq);
                 return;
             }
 
@@ -409,10 +470,13 @@ public class GoogleSpeechService {
             payload.put("answerState", result.getAnswerState());
             payload.put("timestamp", System.currentTimeMillis());
 
+            log.info("📦 [CALLBACK] 페이로드 생성 완료 - payload={}", payload);
             enqueueDropOldest(context.outboundQueue, payload, OUTBOUND_QUEUE_CAPACITY);
+            log.info("📦 [CALLBACK] Outbound 큐에 추가 완료");
 
             WebSocketSession session = context.webSocketSession;
             if (session != null) {
+                log.info("📤 [CALLBACK] WebSocket으로 전송 시작 - sessionId={}", result.getSessionId());
                 flushOutbound(session, context);
                 // 전송 성공으로 간주하고 마지막 seq 갱신 및 requestId 기록
                 if (currSeq != null && currSeq >= lastSeq) {

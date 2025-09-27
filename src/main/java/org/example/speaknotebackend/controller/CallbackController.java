@@ -34,12 +34,34 @@ public class CallbackController {
     })
     @PostMapping("/annotations")
     public BaseResponse<Void> onAnnotations(@RequestBody AnnotationCallbackRequest body) {
-        log.info("[CALLBACK] totalNum={} results={}", body.getTotalNum(), body.getResults() == null ? 0 : body.getResults().size());
-        if (body.getResults() != null) {
-            for (AnnotationCallbackRequest.AnnotationResult result : body.getResults()) {
-                googleSpeechService.enqueueOutboundFromCallback(result);
+        try {
+            log.info("📥 [CALLBACK] 파이썬에서 콜백 요청 수신 - totalNum={}, results={}", 
+                    body.getTotalNum(), body.getResults() == null ? 0 : body.getResults().size());
+            
+            if (body.getResults() != null) {
+                for (AnnotationCallbackRequest.AnnotationResult result : body.getResults()) {
+                    log.info("📥 [CALLBACK] 결과 처리 시작 - userId={}, sessionId={}, seq={}, requestId={}", 
+                            result.getUserId(), result.getSessionId(), result.getSeq(), result.getRequestId());
+                    log.info("📥 [CALLBACK] 콘텐츠 - audioText='{}', annotation='{}', page={}, answerState={}", 
+                            result.getAudioText(), result.getAnnotation(), result.getPage(), result.getAnswerState());
+                    
+                    try {
+                        googleSpeechService.enqueueOutboundFromCallback(result);
+                        log.info("✅ [CALLBACK] 결과 처리 완료 - sessionId={}, seq={}", result.getSessionId(), result.getSeq());
+                    } catch (Exception e) {
+                        log.error("❌ [CALLBACK] 결과 처리 실패 - sessionId={}, seq={}, error: ", 
+                                result.getSessionId(), result.getSeq(), e);
+                        throw e; // 예외를 다시 던져서 상위에서 처리
+                    }
+                }
+            } else {
+                log.warn("⚠️ [CALLBACK] results가 null입니다");
             }
+            
+            return new BaseResponse<>(null);
+        } catch (Exception e) {
+            log.error("❌ [CALLBACK] 콜백 처리 중 예외 발생: ", e);
+            throw e; // 예외를 다시 던져서 GlobalExceptionHandler에서 처리
         }
-        return new BaseResponse<>(null);
     }
 }

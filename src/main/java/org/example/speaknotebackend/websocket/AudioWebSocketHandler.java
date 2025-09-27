@@ -4,23 +4,28 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.service.GoogleSpeechService;
 import org.example.speaknotebackend.service.TextRefineService;
+import org.example.speaknotebackend.global.JwtService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 
 import org.springframework.web.socket.handler.BinaryWebSocketHandler;
+import org.example.speaknotebackend.config.UserDetailsImpl;
 
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AudioWebSocketHandler extends BinaryWebSocketHandler {
 
-    private final TextRefineService textRefineService;
     private final GoogleSpeechService googleSpeechService;
+    private final JwtService jwtService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -31,10 +36,41 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
             session.getAttributes().put("fileId", fileId);
         }
 
-        log.info("클라이언트 WebSocket 연결됨: {}, fileId={}", session.getId(), fileId);
+        // 사용자 인증 정보 가져오기 (WebSocket에서는 SecurityContext가 비어있을 수 있음)
+        Long userId = null;
+        try {
+            // 1. SecurityContext에서 먼저 시도
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl) {
+                UserDetailsImpl userDetails = (UserDetailsImpl) auth.getPrincipal();
+                userId = userDetails.getUserId();
+                log.info("🔍 [WebSocket] SecurityContext에서 사용자 찾음: userId={}", userId);
+            } else {
+                // 2. WebSocket 쿼리 파라미터에서 connectionToken 검증
+                String connectionToken = resolveConnectionToken(session);
+                if (connectionToken != null) {
+                    try {
+                        // TODO: connectionToken을 Redis나 메모리에 저장하고 검증하는 로직 추가
+                        // 지금은 간단히 UUID 형식인지만 확인
+                        UUID.fromString(connectionToken);
+                        // 임시로 userId=1로 설정 (실제로는 connectionToken으로 userId 조회)
+                        userId = 1L;
+                        log.info("🔍 [WebSocket] connectionToken으로 사용자 찾음: userId={}", userId);
+                    } catch (Exception e) {
+                        log.warn("⚠️ [WebSocket] connectionToken 검증 실패: ", e);
+                    }
+                } else {
+                    log.warn("⚠️ [WebSocket] connectionToken 없음");
+                }
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ [WebSocket] 사용자 인증 정보 가져오기 실패: ", e);
+        }
 
-        // 세션+fileId 기반으로 STT 스트리밍 시작
-        googleSpeechService.startStreaming(session, fileId);
+        log.info("클라이언트 WebSocket 연결됨: {}, fileId={}, userId={}", session.getId(), fileId, userId);
+
+        // 세션+fileId+userId 기반으로 STT 스트리밍 시작
+        googleSpeechService.startStreaming(session, fileId, userId);
     }
 
     @Override
@@ -86,6 +122,27 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
                 }
             }
         } catch (Exception ignore) {}
+        return null;
+    }
+
+    private String resolveConnectionToken(WebSocketSession session) {
+        try {
+            URI uri = session.getUri();
+            if (uri == null || uri.getQuery() == null) return null;
+            String q = uri.getQuery(); // e.g. "fileId=11&token=abc123"
+            for (String pair : q.split("&")) {
+                int i = pair.indexOf('=');
+                if (i > 0) {
+                    String k = URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8);
+                    String v = URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8);
+                    if ("token".equals(k)) {
+                        return v;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ [WebSocket] connectionToken 파싱 실패: ", e);
+        }
         return null;
     }
 }
