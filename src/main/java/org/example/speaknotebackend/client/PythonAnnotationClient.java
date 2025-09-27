@@ -34,33 +34,55 @@ public class PythonAnnotationClient {
                                       String text,
                                       String lang,
                                       String requestId) {
-        Map<String, Object> body = Map.of(
-                "userId", userId,
-                "sessionId", sessionId,
-                "seq", seq,
-                "text", text,
-                "lang", lang,
-                "requestId", requestId
-        );
+        log.info("🌐 [Python Client] /text 호출 시작 - userId={}, sessionId={}, seq={}, requestId={}, textLength={}", 
+                userId, sessionId, seq, requestId, text.length());
+        
+        Map<String, Object> body;
+        try {
+            body = Map.of(
+                    "userId", userId != null ? userId.toString() : "0",
+                    "sessionId", sessionId,
+                    "seq", seq,
+                    "text", text,
+                    "lang", lang,
+                    "requestId", requestId
+            );
 
-        webClient.post()
-                .uri("/text")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .retrieve()
-                .toEntity(QueueResponse.class) // 202(Accepted) 응답 처리
-                .timeout(timeout)
-                .doOnNext((ResponseEntity<QueueResponse> response) -> {
-                    if (response != null && response.getStatusCode().value() == 202 && response.getBody() != null) {
-                        QueueResponse b = response.getBody();
-                        log.info("[PYTHON /text] 파이썬 작업 큐에 들어감: jobId={} sessionId={} seq={}", b.jobId, b.sessionId, b.seq);
-                    } else if (response != null) {
-                        log.warn("[PYTHON /text] 응답 못 받음: {}", response.getStatusCode());
-                    }
-                })
-                .doOnError(err -> log.warn("[PYTHON /text] API 호출 실패: {}", err.toString()))
-                .onErrorResume(err -> Mono.empty())
-                .subscribe();
+            log.info("🌐 [Python Client] 요청 본문: {}", body);
+        } catch (Exception e) {
+            log.error("❌ [Python Client] Map.of() 생성 실패: ", e);
+            return;
+        }
+
+        try {
+            log.info("🌐 [Python Client] WebClient 호출 시작");
+            webClient.post()
+                    .uri("/text")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(body)
+                    .retrieve()
+                    .toEntity(QueueResponse.class) // 202(Accepted) 응답 처리
+                    .timeout(timeout)
+                    .doOnNext((ResponseEntity<QueueResponse> response) -> {
+                        if (response != null && response.getStatusCode().value() == 202 && response.getBody() != null) {
+                            QueueResponse b = response.getBody();
+                            log.info("✅ [Python Client] 파이썬 작업 큐에 들어감: jobId={} sessionId={} seq={}", b.jobId, b.sessionId, b.seq);
+                        } else if (response != null) {
+                            log.warn("⚠️ [Python Client] 응답 못 받음: statusCode={}", response.getStatusCode());
+                        } else {
+                            log.warn("⚠️ [Python Client] 응답이 null");
+                        }
+                    })
+                    .doOnError(err -> {
+                        log.error("❌ [Python Client] API 호출 실패: {}", err.toString());
+                        log.error("❌ [Python Client] 에러 상세: ", err);
+                    })
+                    .onErrorResume(err -> Mono.empty())
+                    .subscribe();
+            log.info("🌐 [Python Client] WebClient 호출 완료");
+        } catch (Exception e) {
+            log.error("❌ [Python Client] WebClient 호출 중 예외 발생: ", e);
+        }
     }
 
     public static class QueueResponse {

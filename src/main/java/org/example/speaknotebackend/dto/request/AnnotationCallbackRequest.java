@@ -36,9 +36,9 @@ public class AnnotationCallbackRequest {
         private String requestId;
 
         @Schema(description = "주석이 속한 페이지 번호")
-        private Integer page;
+        private Integer page = 1; // 기본값 설정
 
         @Schema(description = "주석의 상태 코드 (1,2)")
-        private Integer answerState;
+        private Integer answerState = 1; // 기본값 설정
     }
 }
