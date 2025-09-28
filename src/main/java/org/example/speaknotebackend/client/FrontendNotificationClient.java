@@ -23,8 +23,8 @@ public class FrontendNotificationClient {
     
     /**
      * 프론트엔드에 PDF 처리 완료 알림을 전송한다.
-     * @param fileId 파일 ID
-     * @param userId 사용자 ID
+     * @param fileId 파일 ID (게스트는 0)
+     * @param userId 사용자 ID (게스트는 0)
      */
     public void notifyPdfReady(Long fileId, Long userId) {
         try {

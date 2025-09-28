@@ -97,7 +97,7 @@ public class PdfService {
                 System.out.println("❌ [PdfService] userId가 null - 비로그인 사용자");
             }
             // 비로그인/유저없음인 경우엔 null 리턴(컨트롤러에서 처리)
-            return null;
+            return 0L;
 
         } catch (IOException e) {
             throw new BaseException(BaseResponseStatus.FILE_FAIL_UPLOAD);
@@ -112,10 +112,10 @@ public class PdfService {
             String boundary = "----SpringToFastAPI" + System.currentTimeMillis();
             HttpClient client = HttpClient.newHttpClient();
 
-            // part: 일반 폼 필드 생성기
-            byte[] userIdPart = buildFormField(boundary, "userId", userId == null ? "" : String.valueOf(userId));
-            byte[] fileIdPart = buildFormField(boundary, "fileId", fileId == null ? "" : String.valueOf(fileId));
-            byte[] sessionIdPart = buildFormField(boundary, "sessionId", sessionId == null ? "" : String.valueOf(fileId));
+            // part: 일반 폼 필드 생성기 (게스트는 0으로 전송)
+            byte[] userIdPart = buildFormField(boundary, "userId", String.valueOf(userId));
+            byte[] fileIdPart = buildFormField(boundary, "fileId", String.valueOf(fileId));
+            byte[] sessionIdPart = buildFormField(boundary, "sessionId", sessionId);
 
             // part: 파일
             String fileName = file.getOriginalFilename() == null ? "uploaded.pdf" : file.getOriginalFilename();

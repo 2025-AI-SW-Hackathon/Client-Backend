@@ -30,8 +30,8 @@ public class PdfController {
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Serializable>> uploadForModeling(@RequestParam("file") MultipartFile file,
                                                                  @AuthenticationPrincipal UserDetailsImpl userDetails) {
-        // 인증 사용자면 userId, 아니면 null(게스트)
-        final Long userId = (userDetails != null) ? userDetails.getUserId() : null;
+        // 인증 사용자면 userId, 아니면 0(게스트)
+        final Long userId = (userDetails != null) ? userDetails.getUserId() : 0L;
         System.out.println("🔍 [PdfController] userDetails: " + (userDetails != null ? "존재" : "null"));
         System.out.println("🔍 [PdfController] userId: " + userId);
         System.out.println("🔍 [PdfController] 파일명: " + file.getOriginalFilename());
@@ -40,8 +40,8 @@ public class PdfController {
         final Long fileId = pdfService.saveTempPDF(file, userId);
         System.out.println("🔍 [PdfController] fileId: " + fileId);
 
-        // sessionId - 세션 연결 전이므로 fileId를 문자열로 변환
-        final String sessionId = fileId != null ? fileId.toString() : null;
+        // sessionId - 세션 연결 전이므로 fileId를 문자열로 변환 (게스트는 0)
+        final String sessionId = fileId != null ? fileId.toString() : "0";
         System.out.println("🔍 [PdfController] sessionId: " + sessionId);
 
         // FastAPI로 파일 + userId + fileId + sessionId 함께 전송

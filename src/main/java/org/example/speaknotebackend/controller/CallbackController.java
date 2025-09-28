@@ -99,6 +99,11 @@ public class CallbackController {
                             // HTTP POST로 프론트엔드에 ready 상태 전송 (sessionId = fileId)
                             frontendNotificationClient.notifyPdfReady(fileId, userId);
                             
+                            // 게스트 사용자(fileId=0)인 경우 추가 처리
+                            if (fileId == 0L) {
+                                log.info("🎯 [GUEST_CALLBACK] 게스트 사용자 PDF 처리 완료 - fileId=0");
+                            }
+                            
                             log.info("✅ [CONTEXT_CALLBACK] 컨텍스트 결과 처리 완료 - sessionId={}, fileId={}", result.getSessionId(), fileId);
                         } catch (Exception e) {
                             log.error("❌ [CONTEXT_CALLBACK] 컨텍스트 결과 처리 실패 - sessionId={}, error: ", 
