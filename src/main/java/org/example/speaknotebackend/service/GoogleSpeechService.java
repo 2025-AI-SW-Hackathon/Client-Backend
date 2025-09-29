@@ -33,6 +33,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import org.springframework.scheduling.annotation.Async;
@@ -148,13 +149,6 @@ public class GoogleSpeechService {
         } catch (Exception e) {
             log.error("❌ Google STT 초기화 실패", e);
         }
-    }
-
-    /**
-     * Google STT 스트리밍을 시작한다.
-     */
-    public void startStreaming(WebSocketSession session, Long fileId) {
-        startStreaming(session, fileId, null);
     }
 
     /**

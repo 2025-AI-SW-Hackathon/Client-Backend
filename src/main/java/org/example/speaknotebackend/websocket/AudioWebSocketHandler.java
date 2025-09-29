@@ -3,21 +3,15 @@ package org.example.speaknotebackend.websocket;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.service.GoogleSpeechService;
-import org.example.speaknotebackend.service.TextRefineService;
-import org.example.speaknotebackend.global.JwtService;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.example.speaknotebackend.controller.WebSocketAuthController;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 
 import org.springframework.web.socket.handler.BinaryWebSocketHandler;
-import org.example.speaknotebackend.config.UserDetailsImpl;
 
 import java.net.URI;
-import java.net.URLDecoder;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.UUID;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Slf4j
 @Component
@@ -25,7 +19,6 @@ import java.util.UUID;
 public class AudioWebSocketHandler extends BinaryWebSocketHandler {
 
     private final GoogleSpeechService googleSpeechService;
-    private final JwtService jwtService;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -36,35 +29,18 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
             session.getAttributes().put("fileId", fileId);
         }
 
-        // 사용자 인증 정보 가져오기 (WebSocket에서는 SecurityContext가 비어있을 수 있음)
+        // connectionToken으로 userId 조회
         Long userId = null;
-        try {
-            // 1. SecurityContext에서 먼저 시도
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl) {
-                UserDetailsImpl userDetails = (UserDetailsImpl) auth.getPrincipal();
-                userId = userDetails.getUserId();
-                log.info("🔍 [WebSocket] SecurityContext에서 사용자 찾음: userId={}", userId);
+        String connectionToken = resolveConnectionToken(session);
+        if (connectionToken != null) {
+            userId = WebSocketAuthController.getUserIdByConnectionToken(connectionToken);
+            if (userId != null) {
+                log.info("🔍 [WebSocket] connectionToken으로 사용자 찾음: userId={}", userId);
             } else {
-                // 2. WebSocket 쿼리 파라미터에서 connectionToken 검증
-                String connectionToken = resolveConnectionToken(session);
-                if (connectionToken != null) {
-                    try {
-                        // TODO: connectionToken을 Redis나 메모리에 저장하고 검증하는 로직 추가
-                        // 지금은 간단히 UUID 형식인지만 확인
-                        UUID.fromString(connectionToken);
-                        // 임시로 userId=1로 설정 (실제로는 connectionToken으로 userId 조회)
-                        userId = 1L;
-                        log.info("🔍 [WebSocket] connectionToken으로 사용자 찾음: userId={}", userId);
-                    } catch (Exception e) {
-                        log.warn("⚠️ [WebSocket] connectionToken 검증 실패: ", e);
-                    }
-                } else {
-                    log.warn("⚠️ [WebSocket] connectionToken 없음");
-                }
+                log.warn("⚠️ [WebSocket] connectionToken으로 사용자를 찾을 수 없음: {}", connectionToken);
             }
-        } catch (Exception e) {
-            log.warn("⚠️ [WebSocket] 사용자 인증 정보 가져오기 실패: ", e);
+        } else {
+            log.warn("⚠️ [WebSocket] connectionToken 없음");
         }
 
         log.info("클라이언트 WebSocket 연결됨: {}, fileId={}, userId={}", session.getId(), fileId, userId);
@@ -88,6 +64,14 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         log.info("WebSocket 연결 종료 {}", session.getId());
+        
+        // connectionToken 정리
+        String connectionToken = resolveConnectionToken(session);
+        if (connectionToken != null) {
+            WebSocketAuthController.removeConnectionToken(connectionToken);
+            log.info("🔍 [WebSocket] connectionToken 정리 완료: {}", connectionToken);
+        }
+        
         googleSpeechService.stopStreaming(session);
     }
 
@@ -102,44 +86,56 @@ public class AudioWebSocketHandler extends BinaryWebSocketHandler {
         // (선택) {"type":"init","fileId":123} 같은 초기화 메시지도 허용하고 싶다면 여기서 처리해도 됨
     }
 
+    /**
+     * WebSocket 연결 URL에서 fileId를 추출합니다.
+     * 
+     * @param session WebSocket 세션
+     * @return fileId, 없으면 null
+     * 
+     * 예시 URL: ws://localhost:8080/ws/audio?fileId=123&token=abc-123-def
+     * 반환값: 123L
+     */
     private Long resolveFileId(WebSocketSession session) {
         try {
             URI uri = session.getUri();
-            if (uri == null || uri.getQuery() == null) return null;
-            String q = uri.getQuery(); // e.g. "fileId=11&foo=bar"
-            for (String pair : q.split("&")) {
-                int i = pair.indexOf('=');
-                if (i > 0) {
-                    String k = URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8);
-                    String v = URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8);
-                    if ("fileId".equals(k)) {
-                        try {
-                            return Long.parseLong(v);
-                        } catch (NumberFormatException ignore) {
-                            return null;
-                        }
-                    }
-                }
+            if (uri == null) return null;
+            
+            String fileIdStr = UriComponentsBuilder.fromUri(uri)
+                    .build()
+                    .getQueryParams()
+                    .getFirst("fileId");
+            
+            if (fileIdStr != null) {
+                Long fileId = Long.parseLong(fileIdStr);
+                log.info("🔍 [WebSocket] fileId 직접 전달: {}", fileId);
+                return fileId;
             }
-        } catch (Exception ignore) {}
+            
+        } catch (Exception e) {
+            log.warn("⚠️ [WebSocket] fileId 파싱 실패: ", e);
+        }
         return null;
     }
 
+    /**
+     * WebSocket 연결 URL에서 connectionToken을 추출합니다.
+     * 
+     * @param session WebSocket 세션
+     * @return connectionToken 문자열, 없으면 null
+     * 
+     * 예시 URL: ws://localhost:8080/ws/audio?fileId=123&token=abc-123-def
+     * 반환값: "abc-123-def"
+     */
     private String resolveConnectionToken(WebSocketSession session) {
         try {
             URI uri = session.getUri();
-            if (uri == null || uri.getQuery() == null) return null;
-            String q = uri.getQuery(); // e.g. "fileId=11&token=abc123"
-            for (String pair : q.split("&")) {
-                int i = pair.indexOf('=');
-                if (i > 0) {
-                    String k = URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8);
-                    String v = URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8);
-                    if ("token".equals(k)) {
-                        return v;
-                    }
-                }
-            }
+            if (uri == null) return null;
+            
+            return UriComponentsBuilder.fromUri(uri)
+                    .build()
+                    .getQueryParams()
+                    .getFirst("token");
+                    
         } catch (Exception e) {
             log.warn("⚠️ [WebSocket] connectionToken 파싱 실패: ", e);
         }
