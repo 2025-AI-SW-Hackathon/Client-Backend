@@ -85,6 +85,9 @@ public class GoogleSpeechService {
         final Set<String> recentRequestIds = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
         // 연관 파일 ID (STT 키워드 주입용)
         Long fileId;
+        // 스트림 로테이션 관리: 시작 시각 및 로테이션 스케줄 작업 핸들
+        volatile long streamStartedAtNanos;
+        volatile ScheduledFuture<?> rotationTask;
     }
 
     // 세션 ID별로 SessionContext를 보관하는 맵 (동시성 안전)
@@ -231,62 +234,110 @@ public class GoogleSpeechService {
                 }
             }, 1000, 1000, TimeUnit.MILLISECONDS);
 
-            // 양방향 스트리밍을 위한 BidiStreamObserver 구현
-            speechClient.streamingRecognizeCallable().call(
-                    new BidiStreamObserver<>() {
-
-                        @Override
-                        public void onStart(StreamController controller) {
-                            log.info("STT 스트리밍 시작됨");
-                        }
-
-                        @Override
-                        public void onResponse(StreamingRecognizeResponse response) {
-                            // Google이 반환한 음성 인식 결과를 처리
-                            for (StreamingRecognitionResult result : response.getResultsList()) {
-                                if (result.getAlternativesCount() > 0) {
-                                    String transcript = result.getAlternatives(0).getTranscript();
-                                    boolean isFinal = result.getIsFinal();
-                                    log.info("[STT] {}: {}", isFinal ? "final" : "interim", transcript);
-                                    if (isFinal) {
-                                        int beforeCount = context.textBuffer.getSentenceCount();
-                                        context.textBuffer.appendTranscript(transcript);
-                                        int afterCount = context.textBuffer.getSentenceCount();
-                                        log.info("📝 [STT Buffer] 문장 추가 - 세션={}, 이전={}, 이후={}, 추가된 텍스트='{}'", 
-                                                sessionId, beforeCount, afterCount, transcript);
-                                    }
-                                }
-                            }
-                        }
-
-                        @Override
-                        public void onError(Throwable t) {
-                            log.error("STT 오류", t);
-                        }
-
-                        @Override
-                        public void onComplete() {
-                            log.info("STT 스트림 종료됨");
-                        }
-
-                        @Override
-                        public void onReady(ClientStream<StreamingRecognizeRequest> stream) {
-                            log.info("STT 스트림 전송 준비 완료 (session={})", sessionId);
-                            context.requestStream = stream;
-
-                            // 초기 환경설정 요청 전송
-                            if (sendInitialRequest(context.requestStream, context.fileId)) {
-                                context.initialConfigSent.set(true);
-                            }
-                            context.streamingStarted.set(true);
-                        }
-                    },
-                    GrpcCallContext.createDefault()  // gRPC 호출 컨텍스트
-            );
+            // 최초 스트림을 열고 로테이션 스케줄러 시작
+            openNewStream(context, sessionId);
+            startRotationScheduler(context, sessionId);
 
         } catch (Exception e) {
             log.error("STT 스트리밍 시작 실패", e);
         }
+    }
+
+    /**
+     * 스트림을 새로 열고 초기 설정을 전송한다. 기존 스트림이 있다면 안전하게 종료한다.
+     */
+    private void openNewStream(SessionContext context, String sessionId) {
+        synchronized (context) {
+            try {
+                if (context.requestStream != null) {
+                    try { context.requestStream.closeSend(); } catch (Exception ignore) {}
+                }
+                context.initialConfigSent.set(false);
+
+                speechClient.streamingRecognizeCallable().call(
+                        new BidiStreamObserver<>() {
+
+                            @Override
+                            public void onStart(StreamController controller) {
+                                log.info("STT 스트리밍 시작됨 (session={})", sessionId);
+                                context.streamStartedAtNanos = System.nanoTime();
+                            }
+
+                            @Override
+                            public void onResponse(StreamingRecognizeResponse response) {
+                                for (StreamingRecognitionResult result : response.getResultsList()) {
+                                    if (result.getAlternativesCount() > 0) {
+                                        String transcript = result.getAlternatives(0).getTranscript();
+                                        boolean isFinal = result.getIsFinal();
+                                        log.info("[STT] {}: {}", isFinal ? "final" : "interim", transcript);
+                                        if (isFinal) {
+                                            int beforeCount = context.textBuffer.getSentenceCount();
+                                            context.textBuffer.appendTranscript(transcript);
+                                            int afterCount = context.textBuffer.getSentenceCount();
+                                            log.info("📝 [STT Buffer] 문장 추가 - 세션={}, 이전={}, 이후={}, 추가된 텍스트='{}'",
+                                                    sessionId, beforeCount, afterCount, transcript);
+                                        }
+                                    }
+                                }
+                            }
+
+                            @Override
+                            public void onError(Throwable t) {
+                                log.error("STT 오류 (session={})", sessionId, t);
+                                String msg = t.getMessage();
+                                if (msg != null && msg.contains("OUT_OF_RANGE")) {
+                                    // 시간 초과로 끊김 → 즉시 재연결 시도
+                                    scheduler.execute(() -> {
+                                        log.info("OUT_OF_RANGE 감지 - 즉시 스트림 재시작 (session={})", sessionId);
+                                        openNewStream(context, sessionId);
+                                    });
+                                }
+                            }
+
+                            @Override
+                            public void onComplete() {
+                                log.info("STT 스트림 종료됨 (session={})", sessionId);
+                            }
+
+                            @Override
+                            public void onReady(ClientStream<StreamingRecognizeRequest> stream) {
+                                log.info("STT 스트림 전송 준비 완료 (session={})", sessionId);
+                                context.requestStream = stream;
+                                if (sendInitialRequest(context.requestStream, context.fileId)) {
+                                    context.initialConfigSent.set(true);
+                                }
+                                context.streamingStarted.set(true);
+                            }
+                        },
+                        GrpcCallContext.createDefault()
+                );
+            } catch (Exception e) {
+                log.error("스트림 생성 실패 (session={})", sessionId, e);
+            }
+        }
+    }
+
+    /**
+     * 약 4분 주기로 gRPC 스트림을 재시작하여 Google STT의 305초 제한을 회피한다.
+     */
+    private void startRotationScheduler(SessionContext context, String sessionId) {
+        // 240초(4분) 주기 재시작
+        final long rotationSeconds = 240L;
+        if (context.rotationTask != null && !context.rotationTask.isDone()) {
+            context.rotationTask.cancel(true);
+        }
+        context.rotationTask = scheduler.scheduleAtFixedRate(() -> {
+            try {
+                if (!context.streamingStarted.get()) return;
+                long elapsedSec = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - context.streamStartedAtNanos);
+                if (elapsedSec >= rotationSeconds) {
+                    log.info("로테이션 트리거 - 경과 {}초, 스트림 재시작 (session={})", elapsedSec, sessionId);
+                    openNewStream(context, sessionId);
+                }
+            } catch (Exception e) {
+                log.warn("로테이션 작업 중 오류 (session={})", sessionId, e);
+            }
+        }, rotationSeconds, 5, TimeUnit.SECONDS);
     }
 
     /**
@@ -521,6 +572,9 @@ public class GoogleSpeechService {
                     context.textBuffer.clearAll();
                 if (context.scheduledTask != null && !context.scheduledTask.isCancelled()) {
                     context.scheduledTask.cancel(true);
+                }
+                if (context.rotationTask != null && !context.rotationTask.isCancelled()) {
+                    context.rotationTask.cancel(true);
                 }
                 context.webSocketSession = null;
                 log.info("STT 스트리밍 종료 (session={})", sessionId);
