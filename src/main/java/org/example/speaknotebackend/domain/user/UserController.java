@@ -43,7 +43,9 @@ public class UserController {
             throws Exception {
 
         SocialLoginType loginType = SocialLoginType.fromString(socialLoginType);
-      
+        System.out.println("소셜 로그인 컨트롤러 접근 완료:");
+        System.out.println(code);
+        System.out.println(socialLoginType);
         GetSocialOAuthRes getSocialOAuthRes =
                 oAuthService.oAuthLogin(loginType, code, accessToken);
 
@@ -61,10 +63,11 @@ public class UserController {
     public BaseResponse<UserProfileResponse> getUserProfile(
             @RequestHeader("Authorization") String authorization
     ) {
+        System.out.println("[profile 진입 시작]");
         try {
             Long userId = jwtService.getUserId();
             User user = userService.findActiveById(userId);
-            
+            System.out.println("userId:"+userId);
             UserProfileResponse response = UserProfileResponse.builder()
                     .id(user.getId())
                     .email(user.getEmail())

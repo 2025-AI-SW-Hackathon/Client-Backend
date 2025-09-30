@@ -456,7 +456,12 @@ public class GoogleSpeechService {
             }
 
             Map<String,Object> payload = new HashMap<>();
-            payload.put("userId", result.getUserId());
+            if (result.getUserId()==null) {
+                payload.put("userId",1L);
+            }
+            else {
+                payload.put("userId", result.getUserId());
+            }
             payload.put("seq", result.getSeq());
             payload.put("audioText", result.getAudioText());
             payload.put("annotation", result.getAnnotation());
