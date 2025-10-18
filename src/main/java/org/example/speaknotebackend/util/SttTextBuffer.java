@@ -54,7 +54,7 @@ public class SttTextBuffer {
 
     /** 5개 이상 문장이 있으면 모든 문장을 가져오고 버퍼를 비운다 */
     public synchronized String getSnapshotAndClearIfEnough() {
-        if (sentences.size() < 5) return null;
+        if (sentences.size() < 3) return null;
         
         // 모든 문장을 가져오고 버퍼 클리어
         String joined = String.join(" ", sentences).trim();

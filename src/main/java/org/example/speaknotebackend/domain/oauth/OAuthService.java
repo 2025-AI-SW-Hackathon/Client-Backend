@@ -27,100 +27,44 @@ public class OAuthService {
             SocialLoginType socialLoginType, String code, String accessToken)
             throws IOException {
 
-        final long start = System.currentTimeMillis();
-        log.info("[oAuthLogin] start socialLoginType={}, codePresent={}, accessTokenPresent={}",
-                socialLoginType, code != null, accessToken != null);
-
         SocialOauth socialOauth = socialLoginType.getSocialOauth();
-        log.debug("[oAuthLogin] resolved SocialOauth impl={}", socialOauth.getClass().getSimpleName());
 
-        // 1) 액세스 토큰 확보
         if (accessToken == null) {
-            log.info("[oAuthLogin] accessToken is null → fetching from provider (codePresent={})", code != null);
             accessToken = socialOauth.getAccessToken(code);
-            log.info("[oAuthLogin] received accessToken (len={})", safeLen(accessToken));
-        } else {
-            log.info("[oAuthLogin] client provided accessToken (len={})", safeLen(accessToken));
         }
-
-        // 2) 소셜 사용자 정보 조회
-        log.info("[oAuthLogin] requesting userInfo from provider…");
         SocialUser socialUser = socialOauth.getUserInfo(accessToken);
-        log.info("[oAuthLogin] provider userInfo email={}, socialId={}",
-                maskEmail(socialUser.getEmail()), maskId(socialUser.getSocialId()));
 
         User user;
+
         try {
-            // 3) 기존 유저 조회
-            log.info("[oAuthLogin] find local user by email+socialId");
-            user = userService.findByEmailAndSocialId(socialUser.getEmail(), socialUser.getSocialId());
-            log.info("[oAuthLogin] existing user found id={}", user.getId());
+            // 이메일로 유저 찾기
+            user =
+                    userService.findByEmailAndSocialId(
+                            socialUser.getEmail(), socialUser.getSocialId());
         } catch (Exception e) {
-            // 4) 없으면 생성
-            log.warn("[oAuthLogin] user not found or lookup error → creating new user. reason={}", e.getMessage(), e);
+            // 사용자가 없으면 새로 생성
+            log.info("새로운 소셜 로그인 사용자 생성: {}", socialUser.getEmail());
+            
             SocialType socialType = convertToSocialType(socialLoginType);
-            log.info("[oAuthLogin] createUser email={}, name={}, socialType={}",
-                    maskEmail(socialUser.getEmail()), socialUser.getName(), socialType);
             user = userService.createUser(
                     socialUser.getEmail(),
                     socialUser.getName(),
                     socialUser.getSocialId(),
                     socialType
             );
-            log.info("[oAuthLogin] new user created id={}", user.getId());
         }
 
         try {
-            // 5) JWT 발급
-            log.info("[oAuthLogin] issuing JWTs for userId={}", user.getId());
+            // 서버에 user가 존재하면 앞으로 회원 인가 처리를 위한 jwtToken을 발급한다.
             String accessJwtToken = jwtService.createUserJwt(user.getId());
-            log.debug("[oAuthLogin] accessJwt issued len={}, suffix={}", safeLen(accessJwtToken), lastN(accessJwtToken, 6));
-
             String refreshJwtToken = jwtService.createUserRefreshJwt(user.getId());
-            log.debug("[oAuthLogin] refreshJwt issued len={}, suffix={}", safeLen(refreshJwtToken), lastN(refreshJwtToken, 6));
-
-            // 6) 리프레시 토큰 저장
             user.updateRefreshToken(refreshJwtToken);
-            log.info("[oAuthLogin] refresh token saved for userId={}", user.getId());
 
-            // 7) 응답 생성
-            OauthRes res = new OauthRes(user.getId(), accessJwtToken, refreshJwtToken);
-            log.info("[oAuthLogin] success userId={}, elapsedMs={}", user.getId(), (System.currentTimeMillis() - start));
-            return res;
-        } catch (BaseException e) {
-            log.error("[oAuthLogin] failed to issue JWTs for userId={}: {}", (user != null ? user.getId() : null), e.getMessage(), e);
-            throw e;
+            // 액세스 토큰과 jwtToken, 이외 정보들이 담긴 자바 객체를 다시 전송한다.
+            return new OauthRes(user.getId(), accessJwtToken, refreshJwtToken);
+        } catch (BaseException exception) {
+            throw exception;
         }
-    }
-
-    /* ===================== 도움 메서드들(민감정보 마스킹) ===================== */
-
-    private int safeLen(String s) {
-        return (s == null) ? 0 : s.length();
-    }
-
-    private String lastN(String s, int n) {
-        if (s == null) return "null";
-        return s.length() <= n ? s : s.substring(s.length() - n);
-    }
-
-    private String maskEmail(String email) {
-        if (email == null) return "null";
-        int at = email.indexOf('@');
-        if (at <= 1) return "***";
-        String user = email.substring(0, Math.min(2, at));
-        String domain = email.substring(at + 1);
-        String[] parts = domain.split("\\.", 2);
-        String domHead = parts[0];
-        String domMasked = (domHead.length() <= 2) ? "**" : domHead.substring(0, 2) + "***";
-        String tail = (parts.length > 1) ? "." + parts[1] : "";
-        return user + "***@" + domMasked + tail;
-    }
-
-    private String maskId(String id) {
-        if (id == null) return "null";
-        int show = Math.min(3, id.length());
-        return id.substring(0, show) + "***";
     }
 
     private SocialType convertToSocialType(SocialLoginType socialLoginType) {

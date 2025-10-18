@@ -36,7 +36,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        System.out.println("[authHeader 여부]:"+authHeader);
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.replaceFirst("^Bearer( )*", "");
             try {
@@ -55,14 +54,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 System.out.println("✅ [JwtFilter] 인증 객체 등록 완료: " + principal.getUsername());
                 System.out.println("🔓 [JwtFilter] 권한 목록: " + principal.getAuthorities());
-            } catch (Exception e) {
-                logger.warn("❌ [JwtFilter] JWT 검증 실패: " + e.getMessage(), e);
-                // JWT 검증 실패 시에도 요청을 계속 진행 (permitAll 경로를 위해)
-                // SecurityContext는 비어있는 상태로 유지됨
-                System.out.println("⚠️ [JwtFilter] JWT 검증 실패했지만 요청 계속 진행 (permitAll 경로)");
+            } catch (Exception ignored) {
+                // 토큰 문제는 이후 EntryPoint/ExceptionTranslationFilter에서 처리
             }
         }
 
         filterChain.doFilter(request, response);
     }
 }
+
+

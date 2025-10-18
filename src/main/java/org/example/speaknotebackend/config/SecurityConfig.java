@@ -16,9 +16,7 @@ import org.example.speaknotebackend.global.JwtService;
 import org.example.speaknotebackend.domain.user.UserService;
 
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 // removed unused import
 
@@ -63,16 +61,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-
-        // "a,b" → ["a","b"] 로 분해 + trim
-        var origins = Arrays.stream(allowedOrigin.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .collect(Collectors.toList());
-        config.setAllowedOrigins(origins);
-
-
-//        config.setAllowedOrigins(List.of(allowedOrigin)); // 환경변수에서 불러온 값 사용
+        config.setAllowedOrigins(List.of(allowedOrigin)); // 환경변수에서 불러온 값 사용
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Authorization", "Content-Type"));

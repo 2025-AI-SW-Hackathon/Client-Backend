@@ -93,7 +93,7 @@ public class CallbackController {
                             pdfService.updateLectureMetaFromPythonResponse(fileId, result.getSummary(), result.getKeywords());
                             
                             // 콜백에서 직접 받은 userId 사용
-                            Long userId = 1L;
+                            Long userId = result.getUserId();
                             log.info("🔍 [CONTEXT_CALLBACK] 콜백에서 받은 userId={}", userId);
 
                             // HTTP POST로 프론트엔드에 ready 상태 전송 (sessionId = fileId)
