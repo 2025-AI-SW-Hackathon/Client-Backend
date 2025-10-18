@@ -2,6 +2,7 @@ package org.example.speaknotebackend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.example.speaknotebackend.common.entity.BaseEntity;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 

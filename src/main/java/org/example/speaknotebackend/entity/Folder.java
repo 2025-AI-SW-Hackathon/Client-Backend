@@ -3,6 +3,7 @@ package org.example.speaknotebackend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.example.speaknotebackend.common.entity.BaseEntity;
 
 @Entity
 @Table(name = "folder")

@@ -1,17 +1,13 @@
 package org.example.speaknotebackend.domain.folder;
 
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
 import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
-import org.example.speaknotebackend.domain.repository.FolderRepository;
-import org.example.speaknotebackend.domain.repository.LectureHistoryCustom;
-import org.example.speaknotebackend.domain.repository.LectureHistoryCustomImpl;
-import org.example.speaknotebackend.domain.repository.LectureRepository;
+import org.example.speaknotebackend.domain.lecture.LectureRepository;
 import org.example.speaknotebackend.domain.user.UserService;
-import org.example.speaknotebackend.entity.BaseEntity;
+import org.example.speaknotebackend.common.entity.BaseEntity;
 import org.example.speaknotebackend.entity.Folder;
 import org.example.speaknotebackend.entity.Lecture;
 import org.example.speaknotebackend.entity.User;
