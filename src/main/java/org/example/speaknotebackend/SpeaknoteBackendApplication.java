@@ -1,6 +1,6 @@
 package org.example.speaknotebackend;
 
-import org.example.speaknotebackend.domain.oauth.google.GoogleAccessKey;
+import org.example.speaknotebackend.common.oauth.google.GoogleAccessKey;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

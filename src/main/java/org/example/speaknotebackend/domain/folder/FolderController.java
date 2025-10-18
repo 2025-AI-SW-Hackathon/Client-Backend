@@ -1,14 +1,13 @@
 package org.example.speaknotebackend.domain.folder;
 
 import io.swagger.v3.oas.annotations.Operation;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponse;
 import org.example.speaknotebackend.common.response.BaseResponseStatus;
 import org.example.speaknotebackend.domain.folder.model.CreateFolderRequest;
-import org.example.speaknotebackend.config.UserDetailsImpl;
+import org.example.speaknotebackend.common.config.UserDetailsImpl;
 import org.example.speaknotebackend.domain.folder.model.GetFolderListResponse;
 import org.example.speaknotebackend.domain.folder.model.UpdateFolderNameRequest;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

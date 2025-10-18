@@ -2,6 +2,8 @@ package org.example.speaknotebackend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.example.speaknotebackend.common.entity.BaseEntity;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 

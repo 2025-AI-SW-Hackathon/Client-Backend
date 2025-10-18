@@ -6,12 +6,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.speaknotebackend.common.exceptions.BaseException;
 import org.example.speaknotebackend.common.response.BaseResponse;
-import org.example.speaknotebackend.domain.oauth.GetSocialOAuthRes;
-import org.example.speaknotebackend.domain.oauth.OAuthService;
-import org.example.speaknotebackend.domain.oauth.SocialLoginType;
+import org.example.speaknotebackend.common.oauth.GetSocialOAuthRes;
+import org.example.speaknotebackend.common.oauth.OAuthService;
+import org.example.speaknotebackend.common.oauth.SocialLoginType;
 import org.example.speaknotebackend.domain.user.model.UserProfileResponse;
 import org.example.speaknotebackend.entity.User;
-import org.example.speaknotebackend.global.JwtService;
+import org.example.speaknotebackend.utils.JwtService;
 import org.springframework.web.bind.annotation.*;
 
 import static org.example.speaknotebackend.common.response.BaseResponseStatus.*;
