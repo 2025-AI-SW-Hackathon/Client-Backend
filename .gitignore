@@ -45,9 +45,13 @@ out/
 .vscode/
 
 !**/src/main/resources/application-local.properties
+
 # Google Cloud STT key
 src/main/resources/stt-credentials.json
 stt-credentials.json
+src/main/resources/speaknote-GCSSQL.json
+speaknote-GCSSQL.json
+
 # uploads 파일
 uploads
 

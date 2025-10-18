@@ -21,7 +21,8 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import javax.annotation.PostConstruct;
 
-import java.io.FileInputStream;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ClassPathResource;
 import java.util.Deque;
 import java.util.Map;
 import java.util.HashMap;
@@ -135,8 +136,9 @@ public class GoogleSpeechService {
     public void initSpeechClient() {
         log.info("[GoogleSpeechService] STT 클라이언트 초기화 시작 - credentialsPath={}", credentialsPath);
         try {
+            Resource resource = new ClassPathResource(credentialsPath);
             GoogleCredentials credentials = GoogleCredentials.fromStream(
-                    new FileInputStream(credentialsPath)
+                    resource.getInputStream()
             );
 
             // 인증 정보를 포함한 STT 클라이언트 설정
